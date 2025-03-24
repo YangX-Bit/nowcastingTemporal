@@ -1,0 +1,38 @@
+---
+title: "ARABM"
+author: "Yang Xiao"
+date: "2025-03-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(cmdstanr)
+```
+
+```{r}
+path_proj = here::here()
+path_source = file.path(path_proj, "source")
+
+source(file.path(path_source, "functions", "tidy_dengueBR.R"))
+```
+
+
+```{r}
+data_root_dir <- "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue"
+# Input matrix of BRdengue, SP state
+rj_delay_matrix <- get_infodengue_data(root_dir = data_root_dir,
+                         202410, 202501, "RJ",
+                         D = 15, fill_missing = T)$RJ
+
+matplot(t(log(rj_delay_matrix)), type = "l", lty = 1, col = rainbow(nrow(rj_delay_matrix)))
+```
+
+```{r}
+rj_ref_data_root <- file.path(data_root_dir, "202511", "RJ_2025-03-16_infodengue.csv")
+rj_ref_data <- read_csv(rj_ref_data_root)
+rj_actual_cases <- rj_ref_data %>% filter(ew >= 202401 & ew <= 202501) %>%
+  select(ew_start, ew, sum_of_cases)
+```
+
