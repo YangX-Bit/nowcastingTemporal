@@ -1,0 +1,24 @@
+---
+title: "LwGT"
+author: "Yang Xiao"
+date: "2025-03-26"
+output: html_document
+---
+
+```{r}
+path_proj = here::here()
+path_source = file.path(path_proj, "source")
+
+
+path_source_denguetracker <- path_proj
+source(file.path(path_source, "functions", "dengue_tracker_functions.R"))
+aweek::set_week_start("Sunday")
+```
+
+```{r}
+test <- generate_data("RJ", last_ew_start = as.Date("2024-12-22"), ew = 202451, save=F) 
+tail(test$prediction,42)
+
+rj_actual_cases$sum_of_cases - tail(test$prediction,42)
+```
+
