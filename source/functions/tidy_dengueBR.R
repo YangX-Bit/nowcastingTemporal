@@ -168,7 +168,8 @@ get_infodengue_data <- function(
     
     # Set last X rows of delayX columns to NA
     for (X in seq_len(D)) {
-      M[(N - X + 1):N, X + 1] <- NA
+      start_index <- max(1, N - X + 1)
+      M[start_index:N, X + 1] <- NA
     }
     
     rownames(M) <- format(all_dates, "%Y-%m-%d")
