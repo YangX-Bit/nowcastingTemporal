@@ -348,7 +348,6 @@ result_out_length4 <- add_actual_cases(result_out_length4,
 result_out_length4 <- result_out_length4 %>%
   filter(!is.na(ARABM))
 
-result_out_length4 <- result_out_length4[-c(1:4),]
 
 Bastos_metrics_length4 <- error_metrics(result_out_length4$cases_est_id, result_out_length4$sum_of_cases_final)
 GT_metrics_length4 <- error_metrics(result_out_length4$GT, result_out_length4$sum_of_cases_final)
