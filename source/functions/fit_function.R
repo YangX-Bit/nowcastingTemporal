@@ -1,10 +1,3 @@
-# Helper: convert Date to EW code ("YYYYWW")
-date_to_ew_local <- function(date_obj) {
-  aw_obj <- date2week(date_obj, week_start = week_start)
-  year <- substr(aw_obj, 1, 4)
-  weeknum <- substr(aw_obj, 7, 8)
-  paste0(year, weeknum)
-}
 
 run_moving_window <- function(root_dir, state, full_start, full_end,
                               window_length = 8, step_size = 1, 
@@ -12,7 +5,7 @@ run_moving_window <- function(root_dir, state, full_start, full_end,
                               model_name = c("ARABM", "ARABMwGT"),
                               mode = c("fixed", "expanding"),
                               iter_sampling = 10000, iter_warmup = 5000,
-                              chains = 3, thin = 1, week_start = "Sunday",
+                              chains = 3, thin = 1,
                               root_dir_GT = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/gtrends/"
                               ) {
   mode <- match.arg(mode)
@@ -71,8 +64,8 @@ run_moving_window <- function(root_dir, state, full_start, full_end,
     win_end <- window_list[[win]]$end_date
     
     # Convert window start and end to EW codes (for get_infodengue_data)
-    win_start_ew <- date_to_ew_local(win_start)
-    win_end_ew <- date_to_ew_local(win_end)
+    win_start_ew <- date_to_ew(win_start)
+    win_end_ew <- date_to_ew(win_end)
     
     # Get delay matrix via your existing function (assumes it returns a list with element named by state)
     window_data <- get_infodengue_data(root_dir = root_dir,
@@ -156,12 +149,12 @@ extract_N_summary <- function(results, num_N = 8, model_name = "ARABM") {
       selected <- n_sum[(total_N - num_N + 1):total_N, ]
     }
     
-    ew = seq(as.numeric(date_to_ew_local(window_end)) - num_N + 1,
-             as.numeric(date_to_ew_local(window_end)) , by = 1)
+    ew = seq(as.numeric(date_to_ew(window_end)) - num_N + 1,
+             as.numeric(date_to_ew(window_end)) , by = 1)
     # Add window information and a relative index for the selected N values.
     selected <- selected %>%
       mutate(method = model_name,
-             ew_now = date_to_ew_local(window_end),
+             ew_now = date_to_ew(window_end),
              ew = ew,
              !!model_name := mean,
              !!paste0(model_name, "_lwr") := q5,

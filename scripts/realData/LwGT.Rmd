@@ -48,6 +48,7 @@ rj_actual_cases$sum_of_cases - as.numeric(head(test_gt$prediction, ind - 2))
 error_metrics(tail(as.numeric(head(test_gt$prediction, ind - 2)), test_length), 
      tail(rj_actual_cases$sum_of_cases,test_length))
 ```
+
 ```{r}
 bastos_Bayesian <- head(tail(generate_data("RJ", last_ew_start = as.Date("2024-12-29"), ew = 202452, save=F) , ind), ind - 2)
 
@@ -57,11 +58,11 @@ error_metrics(tail(bastos_Bayesian$cases_est_id, test_length),
 ```
 ```{r}
 
-result <- get_last_rows_infodengue(
+result <- get_baseline_data(
   root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue",
   states = "RJ",
   start = 202410,
-  end = 202438,
+  end = 202452,
   last_n = 8
 )
 ```
