@@ -16,17 +16,20 @@ library(bayesplot)
 path_proj = here::here()
 path_source = file.path(path_proj, "source")
 
-
-path_source_denguetracker <- path_proj
 source(file.path(path_source, "functions", "dengue_tracker_functions.R"))
 source(file.path(path_source, "functions", "tidy_dengueBR.R"))
+source(file.path(path_source, "functions", "fit_function.R"))
 aweek::set_week_start("Sunday")
 
-path_source_nowcasting <- "/Users/xiaoy0a/Desktop/GitHub/Dengue/nowcasting/source"
+path_source_nowcasting <- file.path(dirname(path_proj), "nowcasting", "source")
 source(file.path(path_source_nowcasting, "simulation", "simulations_functions_final.R"))
 source(file.path(path_source_nowcasting, "functions", "prior_function.R"))
 source(file.path(path_source_nowcasting, "functions", "fit_function.R"))
 source(file.path(path_source_nowcasting, "functions", "plot_function.R"))
+
+path_source_denguetracker_data <- file.path(dirname(path_proj), "dengue-tracker/data/weekly_data/")
+path_source_denguetracker_infodengue <- file.path(path_source_denguetracker_data, "infodengue")
+path_source_denguetracker_GT <- file.path(path_source_denguetracker_data, "gtrends")
 ```
 
 ```{r}
@@ -56,54 +59,60 @@ error_metrics <- function(predicted, actual) {
 
 ```{r}
 baseline <- get_baseline_data(
-  root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue",
+  root_dir = path_source_denguetracker_data, # root file for data,
   states = "RJ",
   start = 202410,
-  end = 202452,
+  end = 202422,
   last_n = 8
 )
+
 ```
 
 # Fixed window: window length = 8
 ```{r}
 results_length8 <- run_moving_window(
-  root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue",
+  root_dir_infodengue = path_source_denguetracker_infodengue,
+  root_dir_GT = path_source_denguetracker_GT,
   state = "RJ",
   full_start = "202410",
   full_end = "202452",
   window_length = 8,
   step_size = 1,
-  D = 15,
+  D = 10,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
   model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
   model_name = "ARABM",
   mode = "fixed",
   iter_sampling = 2000,
-  iter_warmup = 1000,
-  chains = 3
+  iter_warmup = 500,
+  chains = 3,
+  posterior_draws_path = file.path(path_proj, "draws", "length8")
 )
 
 results_wGT_length8 <- run_moving_window(
-  root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue",
+  root_dir_infodengue = path_source_denguetracker_infodengue,
+  root_dir_GT = path_source_denguetracker_GT,
   state = "RJ",
   full_start = "202410", 
   full_end = "202452",
   window_length = 8,
   step_size = 1,
-  D = 15,
+  D = 10,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
   model_file = file.path(path_source, "models", "b-ou-GT.stan"),
   model_name = "ARABMwGT",
   mode = "fixed",
   iter_sampling = 2000,
-  iter_warmup = 1000,
-  chains = 3
+  iter_warmup = 500,
+  chains = 3,
+  posterior_draws_path = file.path(path_proj, "draws", "length8")
 )
 
 arabm_length8 <- extract_N_summary(results_length8, num_N = 1)
 arabm_wGT_length8 <- extract_N_summary(results_wGT_length8, num_N = 1, model_name = "ARABMwGT")
+
 ```
 
 ```{r}
@@ -118,7 +127,7 @@ result_out_length8 <- baseline %>%
   ) 
 
 result_out_length8 <- add_actual_cases(result_out_length8, 
-                               root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue",
+                               root_dir_infodengue = path_source_denguetracker_infodengue,
                                "RJ",
                                202511)
 result_out_length8 <- result_out_length8 %>%
@@ -138,47 +147,51 @@ ARABMwGT_metrics_length8
 
 ```
 
-
 # Fixed window: window length = 6
 ```{r}
 results_length6 <- run_moving_window(
-  root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue",
+  root_dir_infodengue = path_source_denguetracker_infodengue,
+  root_dir_GT = path_source_denguetracker_GT,
   state = "RJ",
   full_start = "202410",
   full_end = "202452",
   window_length = 6,
   step_size = 1,
-  D = 15,
+  D = 10,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
   model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
   model_name = "ARABM",
   mode = "fixed",
   iter_sampling = 2000,
-  iter_warmup = 1000,
-  chains = 3
+  iter_warmup = 500,
+  chains = 3,
+  posterior_draws_path = file.path(path_proj, "draws", "length6")
 )
 
 results_wGT_length6 <- run_moving_window(
-  root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue",
+  root_dir_infodengue = path_source_denguetracker_infodengue,
+  root_dir_GT = path_source_denguetracker_GT,
   state = "RJ",
   full_start = "202410", 
   full_end = "202452",
   window_length = 6,
   step_size = 1,
-  D = 15,
+  D = 10,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
   model_file = file.path(path_source, "models", "b-ou-GT.stan"),
   model_name = "ARABMwGT",
   mode = "fixed",
   iter_sampling = 2000,
-  iter_warmup = 1000,
-  chains = 3
+  iter_warmup = 500,
+  chains = 3,
+  posterior_draws_path = file.path(path_proj, "draws", "length6")
 )
 
 arabm_length6 <- extract_N_summary(results_length6, num_N = 1)
 arabm_wGT_length6 <- extract_N_summary(results_wGT_length6, num_N = 1, model_name = "ARABMwGT")
+
 ```
 
 ```{r}
@@ -193,7 +206,7 @@ result_out_length6 <- baseline %>%
   ) 
 
 result_out_length6 <- add_actual_cases(result_out_length6, 
-                               root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue",
+                               root_dir_infodengue = path_source_denguetracker_infodengue,
                                "RJ",
                                202511)
 result_out_length6 <- result_out_length6 %>%
@@ -213,46 +226,52 @@ ARABMwGT_metrics_length6
 
 ```
 
+
 # Fixed window: window length = 5
 ```{r}
 results_length5 <- run_moving_window(
-  root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue",
+  root_dir_infodengue = path_source_denguetracker_infodengue,
+  root_dir_GT = path_source_denguetracker_GT,
   state = "RJ",
   full_start = "202410",
   full_end = "202452",
   window_length = 5,
   step_size = 1,
-  D = 15,
+  D = 10,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
   model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
   model_name = "ARABM",
   mode = "fixed",
   iter_sampling = 2000,
-  iter_warmup = 1000,
-  chains = 3
+  iter_warmup = 500,
+  chains = 3,
+  posterior_draws_path = file.path(path_proj, "draws", "length5")
 )
 
 results_wGT_length5 <- run_moving_window(
-  root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue",
+  root_dir_infodengue = path_source_denguetracker_infodengue,
+  root_dir_GT = path_source_denguetracker_GT,
   state = "RJ",
   full_start = "202410", 
   full_end = "202452",
   window_length = 5,
   step_size = 1,
-  D = 15,
+  D = 10,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
   model_file = file.path(path_source, "models", "b-ou-GT.stan"),
   model_name = "ARABMwGT",
   mode = "fixed",
   iter_sampling = 2000,
-  iter_warmup = 1000,
-  chains = 3
+  iter_warmup = 500,
+  chains = 3,
+  posterior_draws_path = file.path(path_proj, "draws", "length5")
 )
 
 arabm_length5 <- extract_N_summary(results_length5, num_N = 1)
 arabm_wGT_length5 <- extract_N_summary(results_wGT_length5, num_N = 1, model_name = "ARABMwGT")
+
 ```
 
 ```{r}
@@ -267,7 +286,7 @@ result_out_length5 <- baseline %>%
   ) 
 
 result_out_length5 <- add_actual_cases(result_out_length5, 
-                               root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue",
+                               root_dir_infodengue = path_source_denguetracker_infodengue,
                                "RJ",
                                202511)
 result_out_length5 <- result_out_length5 %>%
@@ -290,7 +309,8 @@ ARABMwGT_metrics_length5
 # Fixed window: window length = 4
 ```{r}
 results_length4 <- run_moving_window(
-  root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue",
+  root_dir_infodengue = path_source_denguetracker_infodengue,
+  root_dir_GT = path_source_denguetracker_GT,
   state = "RJ",
   full_start = "202410",
   full_end = "202452",
@@ -303,12 +323,14 @@ results_length4 <- run_moving_window(
   model_name = "ARABM",
   mode = "fixed",
   iter_sampling = 2000,
-  iter_warmup = 1000,
-  chains = 3
+  iter_warmup = 500,
+  chains = 3,
+  posterior_draws_path = file.path(path_proj, "draws", "length4")
 )
 
 results_wGT_length4 <- run_moving_window(
-  root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue",
+  root_dir_infodengue = path_source_denguetracker_infodengue,
+  root_dir_GT = path_source_denguetracker_GT,
   state = "RJ",
   full_start = "202410", 
   full_end = "202452",
@@ -321,14 +343,15 @@ results_wGT_length4 <- run_moving_window(
   model_name = "ARABMwGT",
   mode = "fixed",
   iter_sampling = 2000,
-  iter_warmup = 1000,
-  chains = 3
+  iter_warmup = 500,
+  chains = 3,
+  posterior_draws_path = file.path(path_proj, "draws", "length4")
 )
 
 arabm_length4 <- extract_N_summary(results_length4, num_N = 1)
 arabm_wGT_length4 <- extract_N_summary(results_wGT_length4, num_N = 1, model_name = "ARABMwGT")
-```
 
+```
 
 ```{r}
 result_out_length4 <- baseline %>%
@@ -342,11 +365,12 @@ result_out_length4 <- baseline %>%
   ) 
 
 result_out_length4 <- add_actual_cases(result_out_length4, 
-                               root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue",
+                               root_dir_infodengue = path_source_denguetracker_infodengue,
                                "RJ",
                                202511)
 result_out_length4 <- result_out_length4 %>%
   filter(!is.na(ARABM))
+
 
 
 Bastos_metrics_length4 <- error_metrics(result_out_length4$cases_est_id, result_out_length4$sum_of_cases_final)
@@ -360,4 +384,3 @@ ARABM_metrics_length4
 ARABMwGT_metrics_length4
 
 ```
-

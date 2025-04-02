@@ -1,12 +1,13 @@
 
-run_moving_window <- function(root_dir, state, full_start, full_end,
+run_moving_window <- function(root_dir_infodengue, root_dir_GT,
+                              state, full_start, full_end,
                               window_length = 8, step_size = 1, 
                               D, hypers, model_file,
                               model_name = c("ARABM", "ARABMwGT"),
                               mode = c("fixed", "expanding"),
                               iter_sampling = 10000, iter_warmup = 5000,
                               chains = 3, thin = 1,
-                              root_dir_GT = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/gtrends/"
+                              posterior_draws_path
                               ) {
   mode <- match.arg(mode)
   
@@ -52,8 +53,6 @@ run_moving_window <- function(root_dir, state, full_start, full_end,
     }
   }
   
-  print(window_list)
-  
   # Compile Stan model
   model <- cmdstan_model(model_file)
   results <- list()
@@ -68,7 +67,7 @@ run_moving_window <- function(root_dir, state, full_start, full_end,
     win_end_ew <- date_to_ew(win_end)
     
     # Get delay matrix via your existing function (assumes it returns a list with element named by state)
-    window_data <- get_infodengue_data(root_dir = root_dir,
+    window_data <- get_infodengue_data(root_dir_infodengue = root_dir_infodengue,
                                        states = state,
                                        start = win_start_ew,
                                        end = win_end_ew,
@@ -82,7 +81,7 @@ run_moving_window <- function(root_dir, state, full_start, full_end,
     
     # Arrange data for Stan
     if(model_name == "ARABMwGT"){
-      gt <- read.csv(paste0(root_dir_GT,win_end_ew, "/",state,"_trends.csv"), 
+      gt <- read.csv(file.path(root_dir_GT,win_end_ew, paste0(state,"_trends.csv")), 
                stringsAsFactors = FALSE, skip = 2)[,c(1:3)] %>%
         setNames(c("date", "dengue", "sintomas_dengue")) %>%
         filter(date <= win_end & date >= win_start) %>%
@@ -108,7 +107,8 @@ run_moving_window <- function(root_dir, state, full_start, full_end,
       iter_warmup = iter_warmup,
       chains = chains,
       thin = thin,
-      refresh = 0
+      refresh = 0,
+      output_dir = posterior_draws_path
     )
     
     # Extract a summary (or any diagnostics you need)

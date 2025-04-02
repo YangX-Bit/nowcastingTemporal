@@ -24,7 +24,7 @@ library(xtable)
 file.path("..", "Repo_B")
 
 process_data <- function(uf, last_ew_start, ew = NULL,
-                         root_dir = "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data") {
+                         root_dir) {
   # Set directory paths relative to the root directory
   infodengue_dir <- file.path(root_dir, "infodengue")
   gtrends_dir <- file.path(root_dir, "gtrends")
@@ -125,11 +125,13 @@ generate_data <- function(ufs,
                           ew = NULL,
                           index_of_queries = c(1,2),
                           gamma = 0.95,
-                          save = F) {
+                          save = F,
+                          root_dir) {
   final_df <- data.frame()
   for (uf in ufs) {
     #cat(last_ew_start, ew)
-    out <- process_data(uf, last_ew_start, ew = ew)
+    out <- process_data(uf, last_ew_start, ew = ew, 
+                        root_dir = root_dir)
     data <- out[[1]]
     topics <- out[[2]][index_of_queries]
     

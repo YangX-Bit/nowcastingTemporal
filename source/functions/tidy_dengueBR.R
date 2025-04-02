@@ -43,7 +43,7 @@ normalize_ew <- function(x) {
 }
 
 get_infodengue_data <- function(
-    root_dir,
+    root_dir_infodengue,
     start,
     end,
     states,
@@ -53,8 +53,8 @@ get_infodengue_data <- function(
 ) {
   # Validate function inputs
   validate_inputs <- function() {
-    if (!dir.exists(root_dir)) {
-      stop("Root directory does not exist: ", root_dir)
+    if (!dir.exists(root_dir_infodengue)) {
+      stop("Root directory does not exist: ", root_dir_infodengue)
     }
     
     if (!is.character(states) || length(states) == 0) {
@@ -118,7 +118,7 @@ get_infodengue_data <- function(
       current_ew_start_date <- format(all_dates_extended[i], "%Y-%m-%d")
       delayed_date <- as.Date(current_ew_start_date) + 7
       file_name <- paste0(st, "_", format(delayed_date, "%Y-%m-%d"), "_infodengue.csv")
-      folder_path <- file.path(root_dir, ew_code)
+      folder_path <- file.path(root_dir_infodengue, ew_code)
       file_path <- file.path(folder_path, file_name)
       
       if (file.exists(file_path)) {
@@ -211,7 +211,7 @@ get_baseline_data <- function(root_dir, states, start, end, last_n = 8,
       current_ew_start_date <- all_dates[i_week]
       delayed_date <- as.Date(current_ew_start_date) + 7
       file_name <- paste0(st, "_", format(delayed_date, "%Y-%m-%d"), "_infodengue.csv")
-      folder_path <- file.path(root_dir, ew_now)
+      folder_path <- file.path(root_dir, "infodengue", ew_now)
       file_path <- file.path(folder_path, file_name)
       
       if (file.exists(file_path)) {
@@ -223,7 +223,8 @@ get_baseline_data <- function(root_dir, states, start, end, last_n = 8,
           n_to_take <- ifelse(n_rows >= last_n, last_n, n_rows)
           df_last <- tail(df, n_to_take)
           # prediction from linear model with GT
-          df_GT_pred <- tail(generate_data("RJ", last_ew_start = delayed_date, ew = ew_now, save=F), 8)
+          df_GT_pred <- tail(generate_data("RJ", last_ew_start = delayed_date, ew = ew_now, save=F,
+                                           root_dir = root_dir), 8)
           
           df_last <- df_last %>%
             mutate(state = st, ew_now = ew_now,
@@ -244,7 +245,7 @@ get_baseline_data <- function(root_dir, states, start, end, last_n = 8,
 }
 
 # choose ref data and add the "actual cases" to compare
-add_actual_cases <- function(df, root_dir, states, reference) {
+add_actual_cases <- function(df, root_dir_infodengue, states, reference) {
   # Process the reference week
   ref_ew <- normalize_ew(reference)
   ref_start_date <- get_date(
@@ -257,7 +258,7 @@ add_actual_cases <- function(df, root_dir, states, reference) {
   # Loop over each state to read its reference file
   for (st in states) {
     ref_file_name <- paste0(st, "_", format(ref_delayed_date, "%Y-%m-%d"), "_infodengue.csv")
-    ref_folder <- file.path(root_dir, ref_ew)
+    ref_folder <- file.path(root_dir_infodengue, ref_ew)
     ref_file_path <- file.path(ref_folder, ref_file_name)
     
     if (file.exists(ref_file_path)) {
