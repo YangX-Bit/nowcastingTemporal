@@ -11,6 +11,7 @@ library(cmdstanr)
 library(bayesplot)
 ```
 
+# Environment
 ```{r}
 
 path_proj = here::here()
@@ -31,6 +32,18 @@ path_source_denguetracker_data <- file.path(dirname(path_proj), "dengue-tracker/
 path_source_denguetracker_infodengue <- file.path(path_source_denguetracker_data, "infodengue")
 path_source_denguetracker_GT <- file.path(path_source_denguetracker_data, "gtrends")
 ```
+# Parameter settings
+```{r}
+delay_D <- 15
+iter_sampling <- 2000
+iter_warmup <- 500
+window_length <- 8
+step_size <- 1
+
+ew_start <- "202409"
+ew_end <- "202452"
+```
+
 
 ```{r}
 error_metrics <- function(predicted, actual) {
@@ -57,15 +70,14 @@ error_metrics <- function(predicted, actual) {
 
 ```
 
-```{r}
+```{r, warning=FALSE}
 baseline <- get_baseline_data(
   root_dir = path_source_denguetracker_data, # root file for data,
   states = "RJ",
-  start = 202410,
-  end = 202422,
+  start = ew_start,
+  end = ew_end,
   last_n = 8
 )
-
 ```
 
 # Fixed window: window length = 8
@@ -74,18 +86,18 @@ results_length8 <- run_moving_window(
   root_dir_infodengue = path_source_denguetracker_infodengue,
   root_dir_GT = path_source_denguetracker_GT,
   state = "RJ",
-  full_start = "202410",
-  full_end = "202452",
+  full_start = ew_start,
+  full_end = ew_end,
   window_length = 8,
-  step_size = 1,
-  D = 10,
+  step_size = step_size,
+  D = delay_D,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
   model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
   model_name = "ARABM",
   mode = "fixed",
-  iter_sampling = 2000,
-  iter_warmup = 500,
+  iter_sampling = iter_sampling,
+  iter_warmup = iter_warmup,
   chains = 3,
   posterior_draws_path = file.path(path_proj, "draws", "length8")
 )
@@ -94,18 +106,18 @@ results_wGT_length8 <- run_moving_window(
   root_dir_infodengue = path_source_denguetracker_infodengue,
   root_dir_GT = path_source_denguetracker_GT,
   state = "RJ",
-  full_start = "202410", 
-  full_end = "202452",
+  full_start = ew_start, 
+  full_end = ew_end,
   window_length = 8,
-  step_size = 1,
-  D = 10,
+  step_size = step_size,
+  D = delay_D,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
   model_file = file.path(path_source, "models", "b-ou-GT.stan"),
   model_name = "ARABMwGT",
   mode = "fixed",
-  iter_sampling = 2000,
-  iter_warmup = 500,
+  iter_sampling = iter_sampling,
+  iter_warmup = iter_warmup,
   chains = 3,
   posterior_draws_path = file.path(path_proj, "draws", "length8")
 )
@@ -113,6 +125,7 @@ results_wGT_length8 <- run_moving_window(
 arabm_length8 <- extract_N_summary(results_length8, num_N = 1)
 arabm_wGT_length8 <- extract_N_summary(results_wGT_length8, num_N = 1, model_name = "ARABMwGT")
 
+print("done")
 ```
 
 ```{r}
@@ -153,18 +166,18 @@ results_length6 <- run_moving_window(
   root_dir_infodengue = path_source_denguetracker_infodengue,
   root_dir_GT = path_source_denguetracker_GT,
   state = "RJ",
-  full_start = "202410",
-  full_end = "202452",
+  full_start = ew_start,
+  full_end = ew_end,
   window_length = 6,
-  step_size = 1,
-  D = 10,
+  step_size = step_size,
+  D = delay_D,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
   model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
   model_name = "ARABM",
   mode = "fixed",
-  iter_sampling = 2000,
-  iter_warmup = 500,
+  iter_sampling = iter_sampling,
+  iter_warmup = iter_warmup,
   chains = 3,
   posterior_draws_path = file.path(path_proj, "draws", "length6")
 )
@@ -173,18 +186,18 @@ results_wGT_length6 <- run_moving_window(
   root_dir_infodengue = path_source_denguetracker_infodengue,
   root_dir_GT = path_source_denguetracker_GT,
   state = "RJ",
-  full_start = "202410", 
-  full_end = "202452",
+  full_start = ew_start, 
+  full_end = ew_end,
   window_length = 6,
-  step_size = 1,
-  D = 10,
+  step_size = step_size,
+  D = delay_D,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
   model_file = file.path(path_source, "models", "b-ou-GT.stan"),
   model_name = "ARABMwGT",
   mode = "fixed",
-  iter_sampling = 2000,
-  iter_warmup = 500,
+  iter_sampling = iter_sampling,
+  iter_warmup = iter_warmup,
   chains = 3,
   posterior_draws_path = file.path(path_proj, "draws", "length6")
 )
@@ -232,19 +245,19 @@ ARABMwGT_metrics_length6
 results_length5 <- run_moving_window(
   root_dir_infodengue = path_source_denguetracker_infodengue,
   root_dir_GT = path_source_denguetracker_GT,
-  state = "RJ",
-  full_start = "202410",
-  full_end = "202452",
+  state = c("RJ","AC"),
+  full_start = ew_start,
+  full_end = ew_end,
   window_length = 5,
-  step_size = 1,
-  D = 10,
+  step_size = step_size,
+  D = delay_D,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
   model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
   model_name = "ARABM",
   mode = "fixed",
-  iter_sampling = 2000,
-  iter_warmup = 500,
+  iter_sampling = iter_sampling,
+  iter_warmup = iter_warmup,
   chains = 3,
   posterior_draws_path = file.path(path_proj, "draws", "length5")
 )
@@ -252,19 +265,19 @@ results_length5 <- run_moving_window(
 results_wGT_length5 <- run_moving_window(
   root_dir_infodengue = path_source_denguetracker_infodengue,
   root_dir_GT = path_source_denguetracker_GT,
-  state = "RJ",
-  full_start = "202410", 
-  full_end = "202452",
+  state = c("RJ","AC"),,
+  full_start = ew_start, 
+  full_end = ew_end,
   window_length = 5,
-  step_size = 1,
-  D = 10,
+  step_size = step_size,
+  D = delay_D,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
   model_file = file.path(path_source, "models", "b-ou-GT.stan"),
   model_name = "ARABMwGT",
   mode = "fixed",
-  iter_sampling = 2000,
-  iter_warmup = 500,
+  iter_sampling = iter_sampling,
+  iter_warmup = iter_warmup,
   chains = 3,
   posterior_draws_path = file.path(path_proj, "draws", "length5")
 )
@@ -312,10 +325,10 @@ results_length4 <- run_moving_window(
   root_dir_infodengue = path_source_denguetracker_infodengue,
   root_dir_GT = path_source_denguetracker_GT,
   state = "RJ",
-  full_start = "202410",
-  full_end = "202452",
+  full_start = ew_start,
+  full_end = ew_end,
   window_length = 4,
-  step_size = 1,
+  step_size = step_size,
   D = 15,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
@@ -332,10 +345,10 @@ results_wGT_length4 <- run_moving_window(
   root_dir_infodengue = path_source_denguetracker_infodengue,
   root_dir_GT = path_source_denguetracker_GT,
   state = "RJ",
-  full_start = "202410", 
-  full_end = "202452",
+  full_start = ew_start, 
+  full_end = ew_end,
   window_length = 4,
-  step_size = 1,
+  step_size = step_size,
   D = 15,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
@@ -384,3 +397,8 @@ ARABM_metrics_length4
 ARABMwGT_metrics_length4
 
 ```
+
+```{r}
+save(out_b_constant_FR_multi, file = file.path(data_save_path, "FR_b_constant_multi.RData"))
+```
+
