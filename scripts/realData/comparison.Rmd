@@ -35,10 +35,11 @@ path_source_denguetracker_GT <- file.path(path_source_denguetracker_data, "gtren
 # Parameter settings
 ```{r}
 delay_D <- 15
-iter_sampling <- 2000
+iter_sampling <- 1000
 iter_warmup <- 500
 window_length <- 8
 step_size <- 1
+chain_num <- 1
 
 ew_start <- "202409"
 ew_end <- "202452"
@@ -85,7 +86,7 @@ baseline <- get_baseline_data(
 results_length8 <- run_moving_window(
   root_dir_infodengue = path_source_denguetracker_infodengue,
   root_dir_GT = path_source_denguetracker_GT,
-  state = "RJ",
+  state = "ES",
   full_start = ew_start,
   full_end = ew_end,
   window_length = 8,
@@ -98,14 +99,14 @@ results_length8 <- run_moving_window(
   mode = "fixed",
   iter_sampling = iter_sampling,
   iter_warmup = iter_warmup,
-  chains = 3,
+  chains = chain_num,
   posterior_draws_path = file.path(path_proj, "draws", "length8")
 )
 
 results_wGT_length8 <- run_moving_window(
   root_dir_infodengue = path_source_denguetracker_infodengue,
   root_dir_GT = path_source_denguetracker_GT,
-  state = "RJ",
+  state = "ES",
   full_start = ew_start, 
   full_end = ew_end,
   window_length = 8,
@@ -118,7 +119,7 @@ results_wGT_length8 <- run_moving_window(
   mode = "fixed",
   iter_sampling = iter_sampling,
   iter_warmup = iter_warmup,
-  chains = 3,
+  chains = chain_num,
   posterior_draws_path = file.path(path_proj, "draws", "length8")
 )
 

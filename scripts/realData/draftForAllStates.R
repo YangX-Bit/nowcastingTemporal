@@ -25,7 +25,7 @@ for (i in 1:length(test_states)) {
   result_list_test[[i]] <- extract_N_summary(list_test[[i]], num_N = 1)
 }
 
-rbind(result_list_test)
+
 
 baseline_list <- list()
 result_out_list <- list()
