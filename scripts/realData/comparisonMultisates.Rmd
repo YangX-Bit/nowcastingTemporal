@@ -20,6 +20,7 @@ path_source = file.path(path_proj, "source")
 source(file.path(path_source, "functions", "dengue_tracker_functions.R"))
 source(file.path(path_source, "functions", "tidy_dengueBR.R"))
 source(file.path(path_source, "functions", "fit_function.R"))
+source(file.path(path_source, "functions", "metrics.R"))
 aweek::set_week_start("Sunday")
 
 path_source_nowcasting <- file.path(dirname(path_proj), "nowcasting", "source")
@@ -49,8 +50,87 @@ ew_end <- "202452"
 brazil_ufs <- c(
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "GO",
   "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI",
-  "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO", "BR"
+  "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO" # "BR"
 )
+```
+
+
+# Model ARABM
+```{r}
+# 
+# ARABM_result <- list()
+# ARABM_result_out <- list()
+# time_start_ARABM <- Sys.time()
+# for (i in 1:length(brazil_ufs)) {
+#   ARABM_result[[i]] <- run_moving_window(
+#     root_dir_infodengue = path_source_denguetracker_infodengue,
+#     root_dir_GT = path_source_denguetracker_GT,
+#     state = brazil_ufs[i],
+#     full_start = ew_start,
+#     full_end = ew_end,
+#     window_length = window_length,
+#     step_size = step_size,
+#     D = delay_D,
+#     hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
+#                       alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
+#     model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
+#     model_name = "ARABM",
+#     mode = "fixed",
+#     iter_sampling = iter_sampling,
+#     iter_warmup = iter_warmup,
+#     chains = 3,
+#     posterior_draws_path = file.path(posterior_draws_path, "ARABM")
+#   )
+#   ARABM_result_out[[i]] <- extract_N_summary(ARABM_result[[i]], num_N = 1)
+# }
+# time_end_ARABM <- Sys.time()
+# time_end_ARABM - time_start_ARABM
+```
+
+# Model ARABMwGT
+```{r}
+# ARABMwGT_result <- list()
+# ARABMwGT_result_out <- list()
+# time_start_ARABMwGT <- Sys.time()
+# for (i in 1:length(brazil_ufs)) {
+#   ARABMwGT_result[[i]] <- run_moving_window(
+#     root_dir_infodengue = path_source_denguetracker_infodengue,
+#     root_dir_GT = path_source_denguetracker_GT,
+#     state = brazil_ufs[i],
+#     full_start = ew_start,
+#     full_end = ew_end,
+#     window_length = window_length,
+#     step_size = step_size,
+#     D = delay_D,
+#     hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
+#                       alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
+#     model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
+#     model_name = "ARABMwGT",
+#     mode = "fixed",
+#     iter_sampling = iter_sampling,
+#     iter_warmup = iter_warmup,
+#     chains = 3,
+#     posterior_draws_path = file.path(posterior_draws_path, "ARABMwGT")
+#   )
+#   ARABMwGT_result_out[[i]] <- extract_N_summary(ARABMwGT_result[[i]], num_N = 1)
+# }
+# time_end_ARABMwGT <- Sys.time()
+# 
+# time_end_ARABMwGT - time_start_ARABMwGT
+```
+
+```{r}
+# data_file <- "E:/Project3_draws"
+
+#save
+# save(ARABM_result, file = file.path(data_file,  "ARABM_result_raw.RData"))
+# save(ARABM_result_out, file = file.path(data_file,  "ARABM_result.RData"))
+# 
+# save(ARABMwGT_result, file = file.path(data_file,  "ARABMwGT_result_raw.RData"))
+# save(ARABMwGT_result_out, file = file.path(data_file, "ARABMwGT_result.RData"))
+
+load(file.path(path_proj, "data", "results", "ARABM_result_out.RData"))
+load(file.path(path_proj, "data", "results", "ARABMwGT_result_out.RData"))
 ```
 
 # Baseline data
@@ -65,117 +145,55 @@ brazil_ufs <- c(
 #     last_n = 8
 #   )
 # }
-# 
+#
 # save(baseline_list, file = file.path(path_proj, "data", "results", "baseline_list.RData"))
 load(file.path(path_proj, "data", "results", "baseline_list.RData"))
 
 ```
 
-# Model ARABM
 ```{r}
-
-ARABM_result <- list()
-ARABM_result_out <- list()
-time_start_ARABM <- Sys.time()
-for (i in 1:length(brazil_ufs)) {
-  ARABM_result[[i]] <- run_moving_window(
-    root_dir_infodengue = path_source_denguetracker_infodengue,
-    root_dir_GT = path_source_denguetracker_GT,
-    state = brazil_ufs[i],
-    full_start = ew_start,
-    full_end = ew_end,
-    window_length = window_length,
-    step_size = step_size,
-    D = delay_D,
-    hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
-                      alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
-    model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
-    model_name = "ARABM",
-    mode = "fixed",
-    iter_sampling = iter_sampling,
-    iter_warmup = iter_warmup,
-    chains = 3,
-    posterior_draws_path = file.path(posterior_draws_path, "ARABM")
+# wrong name, change name
+ARABMwGT_result_out <- map(
+  ARABMwGT_result_out,
+  ~ rename(.x,
+    ARABMwGT       = ARABM,
+    ARABMwGT_lwr   = ARABM_lwr,
+    ARABMwGT_upr   = ARABM_upr
   )
-  ARABM_result_out[[i]] <- extract_N_summary(ARABM_result[[i]], num_N = 1)
-}
-time_end_ARABM <- Sys.time()
-time_end_ARABM - time_start_ARABM
+)
+save(ARABMwGT_result_out, file = file.path(path_proj, "data", "results", "ARABMwGT_result_out.RData"))
 ```
-
-# Model ARABMwGT
-```{r}
-ARABMwGT_result <- list()
-ARABMwGT_result_out <- list()
-time_start_ARABMwGT <- Sys.time()
-for (i in 1:length(brazil_ufs)) {
-  ARABMwGT_result[[i]] <- run_moving_window(
-    root_dir_infodengue = path_source_denguetracker_infodengue,
-    root_dir_GT = path_source_denguetracker_GT,
-    state = brazil_ufs[i],
-    full_start = ew_start,
-    full_end = ew_end,
-    window_length = window_length,
-    step_size = step_size,
-    D = delay_D,
-    hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
-                      alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
-    model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
-    model_name = "ARABMwGT",
-    mode = "fixed",
-    iter_sampling = iter_sampling,
-    iter_warmup = iter_warmup,
-    chains = 3,
-    posterior_draws_path = file.path(posterior_draws_path, "ARABMwGT")
-  )
-  ARABMwGT_result_out[[i]] <- extract_N_summary(ARABMwGT_result[[i]], num_N = 1)
-}
-time_end_ARABMwGT <- Sys.time()
-
-time_end_ARABMwGT - time_start_ARABMwGT
-```
-```{r}
-data_file <- "E:/Project3_draws"
-
-#save
-save(ARABM_result, file = file.path(data_file,  "ARABM_result_raw.RData"))
-save(ARABM_result_out, file = file.path(data_file,  "ARABM_result.RData"))
-
-save(ARABMwGT_result, file = file.path(data_file,  "ARABMwGT_result_raw.RData"))
-save(ARABMwGT_result_out, file = file.path(data_file, "ARABMwGT_result.RData"))
-```
-
-
 
 
 ```{r}
 
 result_out_list <- list()
-for (i in 1:length(test_states)) {
-  baseline_list[[i]] <- get_baseline_data(
-    root_dir = path_source_denguetracker_data, # root file for data,
-    states = test_states[i],
-    start = ew_start,
-    end = ew_end,
-    last_n = 8
-  )
+for (i in 1:length(brazil_ufs)) {
+  # baseline_list[[i]] <- get_baseline_data(
+  #   root_dir = path_source_denguetracker_data, # root file for data,
+  #   states = test_states[i],
+  #   start = ew_start,
+  #   end = ew_end,
+  #   last_n = 8
+  # )
   result_out_list[[i]] <- baseline_list[[i]] %>%
     left_join(
-      result_list_test[[i]] %>% select(ew_now, ew, ARABM, ARABM_lwr, ARABM_upr),
+      ARABM_result_out[[i]] %>% select(ew_now, ew, ARABM, ARABM_lwr, ARABM_upr),
       by = c("ew_now", "ew")
-    ) 
+    ) %>%
     left_join(
-      arabm_wGT_length8 %>% select(ew_now, ew, ARABMwGT, ARABMwGT_lwr, ARABMwGT_upr),
+      ARABMwGT_result_out[[i]] %>% select(ew_now, ew, ARABMwGT, ARABMwGT_lwr, ARABMwGT_upr),
       by = c("ew_now", "ew")
     )
   
-  result_out_list[[i]] <- add_actual_cases(result_out_list[[i]], 
+  result_out_list[[i]] <- add_actual_cases(result_out_list[[i]],
                                          root_dir_infodengue = path_source_denguetracker_infodengue,
-                                         test_states[i],
-                                         202511)
+                                         brazil_ufs[i],
+                                         202512)
   result_out_list[[i]] <- result_out_list[[i]] %>%
     filter(!is.na(ARABM))
 }
+result_out_list[[1]]
 ```
 
 
@@ -205,6 +223,51 @@ error_metrics <- function(predicted, actual) {
 ```
 
 
+```{r}
+# metrics
+rmse <- calculate_metrics(result_out_list, "RMSE")
+
+mae <- calculate_metrics(result_out_list, "MAE")
+
+rmspe <- calculate_metrics(result_out_list, "RMSPE")
+
+mape <- calculate_metrics(result_out_list, "MAPE")
+
+mciw <- calculate_metrics(result_out_list, "MCIW")
+
+mcr <- calculate_metrics(result_out_list, "MCR")
+
+metrics_list <- list(rmse = rmse, mae = mae, rmspe = rmspe, mape = mape,
+                     mciw = mciw, mcr = mcr)
+
+
+brazil_states_full <- c(
+  "Acre", "Alagoas", "Amapá", "Amazonas", "Bahia", "Ceará", "Distrito Federal", 
+  "Espírito Santo", "Goiás", "Maranhão", "Mato Grosso", "Mato Grosso do Sul", 
+  "Minas Gerais", "Pará", "Paraíba", "Paraná", "Pernambuco", "Piauí", 
+  "Rio de Janeiro", "Rio Grande do Norte", "Rio Grande do Sul", "Rondônia", 
+  "Roraima", "Santa Catarina", "São Paulo", "Sergipe", "Tocantins"
+)
+
+captions <- c("RMSE Results by State", "MAE Results by State",
+              "RMSPE Results by State", "MAPE Results by State",
+              "MCIW Results by State", "MCR Results by State")
+
+
+for (i in 1:5) {
+  cat(df_to_latex(metrics_list[[i]], 
+                  caption = captions[i], 
+                  label = paste0("tab:",names(metrics_list)[i]), 
+                  highlight_mode = "min", 
+                  highlight_n = 2))
+}
+
+cat(df_to_latex(metrics_list[[6]], 
+                  caption = captions[6], 
+                  label = paste0("tab:",names(metrics_list)[6]), 
+                  highlight_mode = "max", 
+                  highlight_n = 2))
+```
 
 ```{r}
 save(out_b_constant_FR_multi, file = file.path(data_save_path, "FR_b_constant_multi.RData"))

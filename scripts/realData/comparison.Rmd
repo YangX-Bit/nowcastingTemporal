@@ -35,14 +35,16 @@ path_source_denguetracker_GT <- file.path(path_source_denguetracker_data, "gtren
 # Parameter settings
 ```{r}
 delay_D <- 15
-iter_sampling <- 1000
-iter_warmup <- 500
-window_length <- 8
+iter_sampling <- 5000
+iter_warmup <- 2000
+window_length <- 10
 step_size <- 1
 chain_num <- 1
 
-ew_start <- "202409"
+ew_start <- "202410"
 ew_end <- "202452"
+
+state <- "AC"
 ```
 
 
@@ -74,10 +76,11 @@ error_metrics <- function(predicted, actual) {
 ```{r, warning=FALSE}
 baseline <- get_baseline_data(
   root_dir = path_source_denguetracker_data, # root file for data,
-  states = "RJ",
+  states = state,
   start = ew_start,
   end = ew_end,
-  last_n = 8
+  time_unit = "week",
+  last_n = 10
 )
 ```
 
@@ -86,7 +89,7 @@ baseline <- get_baseline_data(
 results_length8 <- run_moving_window(
   root_dir_infodengue = path_source_denguetracker_infodengue,
   root_dir_GT = path_source_denguetracker_GT,
-  state = "ES",
+  state = state,
   full_start = ew_start,
   full_end = ew_end,
   window_length = 8,
@@ -106,7 +109,7 @@ results_length8 <- run_moving_window(
 results_wGT_length8 <- run_moving_window(
   root_dir_infodengue = path_source_denguetracker_infodengue,
   root_dir_GT = path_source_denguetracker_GT,
-  state = "ES",
+  state = state,
   full_start = ew_start, 
   full_end = ew_end,
   window_length = 8,
@@ -142,7 +145,7 @@ result_out_length8 <- baseline %>%
 
 result_out_length8 <- add_actual_cases(result_out_length8, 
                                root_dir_infodengue = path_source_denguetracker_infodengue,
-                               "RJ",
+                               state,
                                202511)
 result_out_length8 <- result_out_length8 %>%
   filter(!is.na(ARABM))

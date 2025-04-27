@@ -182,8 +182,8 @@ get_infodengue_data <- function(
 
 # get the baseline dataframe
 get_baseline_data <- function(root_dir, states, start, end, last_n = 8, 
-                                     test_gap = 7,
-                                     all_dates = NULL) {
+                              time_unit = c("week","day"),
+                              all_dates = NULL) {
   
   # Process start and end dates
   start_ew <- normalize_ew(start)
@@ -196,9 +196,17 @@ get_baseline_data <- function(root_dir, states, start, end, last_n = 8,
     stop("End date cannot be earlier than start date.")
   }
   
+  if(time_unit == "week"){
+    time_gap = 7
+  }else if(time_unit == "day"){
+    time_gap = 1
+  }else{
+    stop("time_unit has to be 'week' or 'day'!")
+  }
+  
   # Generate weekly sequence of dates
   if (is.null(all_dates)) {
-    all_dates <- seq(from = start_date, to = end_date, by = test_gap)
+    all_dates <- seq(from = start_date, to = end_date, by = time_gap)
   }
   all_ews <- sapply(all_dates, date_to_ew, USE.NAMES = FALSE)
   
@@ -216,6 +224,10 @@ get_baseline_data <- function(root_dir, states, start, end, last_n = 8,
       
       if (file.exists(file_path)) {
         df <- read_csv(file_path, show_col_types = FALSE)
+        if(ew_now == "202409"){
+          df$ew <- str_replace(substr(as.aweek(df$ew_start, week_start = "Sunday"), 1, 8),
+                               "-W", "")
+        }
         required_cols <- c("ew_start", "ew", "sum_of_cases", 
                            "cases_est_id", "cases_est_id_min", "cases_est_id_max")
         if (all(required_cols %in% names(df))) {
@@ -223,8 +235,8 @@ get_baseline_data <- function(root_dir, states, start, end, last_n = 8,
           n_to_take <- ifelse(n_rows >= last_n, last_n, n_rows)
           df_last <- tail(df, n_to_take)
           # prediction from linear model with GT
-          df_GT_pred <- tail(generate_data("RJ", last_ew_start = delayed_date, ew = ew_now, save=F,
-                                           root_dir = root_dir), 8)
+          df_GT_pred <- tail(generate_data(states, last_ew_start = delayed_date, ew = ew_now, save=F,
+                                           root_dir = root_dir), last_n)
           
           df_last <- df_last %>%
             mutate(state = st, ew_now = ew_now,
