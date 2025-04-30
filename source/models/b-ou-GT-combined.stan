@@ -59,7 +59,7 @@ transformed parameters {
 
 model {
   // Priors
-  beta_0 ~ normal(0, 1);
+  beta_0 ~ normal(3, 1);
   mu_log_b ~ normal(mean_log_b, sd_log_b);
   mu_logit_phi ~ normal(mean_logit_phi, sd_logit_phi);
   theta_log_b ~ lognormal(0, 1);
@@ -69,7 +69,7 @@ model {
 
   // RW-1 for β_{k,t}
   for (k in 1:K) {
-    beta_t[k,1] ~ normal(0, 1);
+    beta_t[k,1] ~ normal(0, 0.005);
     for (t in 2:T)
       beta_t[k,t] ~ normal(beta_t[k,t-1], sigma_beta);
   }

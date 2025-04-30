@@ -30,94 +30,86 @@ b_ou <-  file.path(path_source_nowcasting, "models", "b-ou.stan")
 model <- cmdstan_model(b_ou)
 
 b_ou_lambda <- file.path(path_proj, "source", "models", "b-ou-GT-combined.stan")
+# b_ou_lambda <- file.path(path_proj, "source", "models", "b-ou-GT-time-varying-betas.stan")
 model_GT <- cmdstan_model(b_ou_lambda)
 ```
 # GT
 ```{r}
-# 1. Parameter settings
-set.seed(123)
-T <- 60                   # number of time points
-mu <- 30                   # GT peak position
-sig <- 15                  # GT peak width
-
-# Noise heteroscedasticity parameters
-alpha      <- 2           # baseline noise level
-beta_noise <- 0.05        # noise coefficient proportional to GT
-
-# AR(1) parameters for time-varying beta_GT_t
-mean_betaGT <- 0.5        # long-term mean of beta_GT
-rho_betaGT  <- 0.9        # AR(1) autocorrelation for beta_GT
-sigma_beta  <- 0.05       # innovation standard deviation for beta_GT
-
-# AR(1) parameters for residual eta
-rho_eta    <- 0.8         # autocorrelation of eta
-sigma_eta  <- 0.2         # innovation standard deviation of eta
-
-# Intercept
-beta0 <- 3                # fixed intercept
-
-# 2. Simulate Google Trends (GT) data
-t        <- 1:T
-gt_base  <- 100 * exp(-(t - mu)^2 / (2 * sig^2))         # bell-shaped base trend
-noise_sd <- alpha + beta_noise * gt_base                # heteroscedastic noise sd
-gt_noisy <- gt_base + rnorm(T, sd = noise_sd)            # add noise
-GT       <- round(pmin(100, pmax(0, gt_noisy)))          # truncate to [0,100] and round
-
-# Standardize GT
-ZT <- (GT - mean(GT)) / sd(GT)                           # zero-mean, unit-variance
-
-# 3. Simulate time-varying coefficient beta_GT_t via AR(1)
-beta_GT <- numeric(T)
-beta_GT[1] <- rnorm(1, mean = mean_betaGT, sd = sigma_beta)
-for (i in 2:T) {
-  beta_GT[i] <- rho_betaGT * beta_GT[i-1] +
-                (1 - rho_betaGT) * mean_betaGT +
-                rnorm(1, sd = sigma_beta)
-}
-
-# 4. Simulate AR(1) residual eta_t
-eta <- numeric(T)
-eta[1] <- rnorm(1, sd = sigma_eta)
-for (i in 2:T) {
-  eta[i] <- rho_eta * eta[i-1] + rnorm(1, sd = sigma_eta)
-}
-
-# 5. Construct raw log_lambda and scale it to [3, 7]
-raw_log_lambda <- beta0 + beta_GT * ZT + eta
-
-# Scaling function to map x to [new_min, new_max]
 scale_to_range <- function(x, new_min, new_max) {
   (x - min(x)) / (max(x) - min(x)) * (new_max - new_min) + new_min
 }
+# 1. Parameter settings
+set.seed(123)
+T <- 60                    # number of time points
 
-log_lambda <- scale_to_range(raw_log_lambda, 3, 7)       # now in [3,7]
-lambda     <- exp(log_lambda)
+# GT bell‐shaped trend parameters
+mu           <- 30         # peak position
+sig          <- 15         # peak width
+alpha_noise  <- 2          # baseline noise level for GT
+beta_noise   <- 0.05       # heteroscedastic noise coefficient for GT
 
-# 6. Visualize results
-par(mfrow = c(3,1), mar = c(4,4,3,1))
-plot(t, raw_log_lambda, type = "l", col = "gray",
-     main = "Raw log_lambda (unscaled)", ylab = "raw log(λ)", xlab = "t")
-abline(h = c(min(raw_log_lambda), max(raw_log_lambda)), lty = 2, col = "gray")
-plot(t, log_lambda, type = "l", col = "blue",
-     main = "Scaled log_lambda ∈ [3,7]", ylab = "scaled log(λ)", xlab = "t")
-abline(h = c(3,7), lty = 2, col = "blue")
+# AR(1) parameters for time‐varying beta_t
+mean_beta    <- 0.1        # long‐term mean of beta_t
+rho_beta     <- 0.9        # autocorrelation for beta_t
+sigma_beta   <- 0.02        # innovation sd for beta_t
+
+# Small additive noise for lambda
+sigma_eta    <- 0.01          # innovation sd for lambda
+rho_eta <- 0.9
+
+# 2. Simulate Google Trends (GT) data
+t       <- 1:T
+gt_base <- 100 * exp(-(t - mu)^2 / (2 * sig^2))             # bell‐shaped base
+noise_sd<- alpha_noise + beta_noise * gt_base              # heteroscedastic sd
+gt_noisy<- gt_base + rnorm(T, sd = noise_sd)                # add noise
+GT      <- round(pmin(100, pmax(0, gt_noisy)))              # truncate & round
+
+# 3. Simulate time‐varying coefficient beta_t via AR(1)
+beta0 <- 3
+beta_t <- numeric(T)
+beta_t[1] <- rnorm(1, mean = mean_beta, sd = sigma_beta)
+for (i in 2:T) {
+  beta_t[i] <- rho_beta * beta_t[i-1] +
+    (1 - rho_beta) * mean_beta +
+    rnorm(1, sd = sigma_beta)
+}
+beta_t_scaled <- scale_to_range(beta_t, 0.02, 0.04)
+
+# 4. Simulate small additive noise ε_t
+eta <- numeric(T)
+eta[1] <- rnorm(1, 0, sigma_eta)
+for (i in 2:T) {
+  eta[i] <- rho_eta * eta[i-1] + rnorm(1, 0, sigma_eta)
+}
+
+# 5. Construct lambda_t with identity‐link: λ_t = α + β_t * GT_t + ε_t
+raw_log_lambda <- beta0 + beta_t_scaled * GT + eta
+
+lambda         <- exp(raw_log_lambda)                                # ensure positivity
+
+# 6. Check correlation between GT and λ for large d (≈ N_t)
+corr_GT_lambda <- cor(GT, lambda)
+cat("Corr(GT, lambda) =", round(corr_GT_lambda, 3), "\n")
+
+# 7. Plot GT, β_t and λ_t
+par(mfrow = c(3,1), mar = c(4,4,2,1))
+plot(t, GT, type = "l", col = "blue",
+     main = "Simulated Google Trends", ylab = "GT index", xlab = "t")
+plot(t, beta_t, type = "l", col = "purple",
+     main = "Time‐varying Coefficient β_t", ylab = expression(beta[t]), xlab = "t")
 plot(t, lambda, type = "l", col = "darkgreen",
      main = expression("Simulated " * lambda[t]), ylab = expression(lambda[t]), xlab = "t")
 
-# 7. Show first few entries
+# 8. Preview first few values
 head(data.frame(
-  t              = t,
-  GT             = GT,
-  beta_GT        = round(beta_GT, 3),
-  eta            = round(eta, 3),
-  raw_log_lambda = round(raw_log_lambda, 3),
-  log_lambda     = round(log_lambda, 3),
-  lambda         = round(lambda, 1)
+  t       = t,
+  GT      = GT,
+  beta_t  = round(beta_t, 3),
+  lambda  = round(lambda, 1)
 ))
 
+cor(GT, raw_log_lambda)
 ```
-
-
 
 ## Fully reported scenario
 
@@ -125,11 +117,12 @@ head(data.frame(
 
 ```{r}
 # data
-alpha_increase_seq_1 <- seq(10, 750, by = 30)
-alpha_decrease_seq_1 <- seq(750, 10, by = -30)
-alpha_lamb =  c( rep(10,5), alpha_increase_seq_1 + rnorm(alpha_increase_seq_1,10,10),
-                 alpha_decrease_seq_1 + rnorm(alpha_decrease_seq_1,10,10),
-                 rep(10,5))
+# alpha_increase_seq_1 <- seq(10, 750, by = 30)
+# alpha_decrease_seq_1 <- seq(750, 10, by = -30)
+# alpha_lamb =  c( rep(10,5), alpha_increase_seq_1 + rnorm(alpha_increase_seq_1,10,10),
+#                  alpha_decrease_seq_1 + rnorm(alpha_decrease_seq_1,10,10),
+#                  rep(10,5))
+alpha_lamb = lambda
 beta_lamb = 0.5
 T = 60
 D <- 15;
@@ -161,23 +154,23 @@ par(mfrow = c(1, 1))
 matplot(t(b_ou_FR$q), type = "l", lty = 1, ylim = c(0, 1))
 
 # GT trends
-case_true_FR_normalized <- round(b_ou_FR$case_true / max(b_ou_FR$case_true, na.rm = TRUE) * 100, 4)
-
-case_true_FR_normalized 
-
-k <- 0.2 # 20% of index
-noise_sd <- case_true_FR_normalized * k
-
-
-gt_with_noise <- round(case_true_FR_normalized + rnorm(T, mean = 0, sd = noise_sd) ,0) 
-gt_with_noise <- pmax(0, pmin(100, gt_with_noise))
-gt_with_noise_mat <- matrix(gt_with_noise, ncol = 1)
-
-cor(case_true_FR_normalized, gt_with_noise)
-cor(log(b_ou_FR$case_true), gt_with_noise)
-
-plot(ts( as.numeric(case_true_FR_normalized)))
-lines(as.numeric(gt_with_noise))
+# case_true_FR_normalized <- round(b_ou_FR$case_true / max(b_ou_FR$case_true, na.rm = TRUE) * 100, 4)
+# 
+# case_true_FR_normalized 
+# 
+# k <- 0.2 # 20% of index
+# noise_sd <- case_true_FR_normalized * k
+# 
+# 
+# gt_with_noise <- round(case_true_FR_normalized + rnorm(T, mean = 0, sd = noise_sd) ,0) 
+# gt_with_noise <- pmax(0, pmin(100, gt_with_noise))
+# gt_with_noise_mat <- matrix(gt_with_noise, ncol = 1)
+# 
+# cor(case_true_FR_normalized, gt_with_noise)
+# cor(log(b_ou_FR$case_true), gt_with_noise)
+# 
+# plot(ts( as.numeric(case_true_FR_normalized)))
+# lines(as.numeric(gt_with_noise))
 
 
 ```
@@ -248,7 +241,7 @@ mcmc_areas(test$draws("N"), prob_outer = 0.95) +
 ind = 40
 hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 stan_data_GT <- c(list(T = ind, D = 15, Y = b_ou_FR$case_reported_cumulated[1:ind, ]), hypers, 
-               list(K = ncol(gt_with_noise_mat), X = as.matrix(gt_with_noise_mat[1:ind, 1])) )
+               list(K = ncol(matrix(GT)), X = as.matrix(matrix(GT)[1:ind, 1])) )
 
 test_GT = model_GT$sample(
     data = stan_data_GT,
@@ -272,37 +265,43 @@ param_true = tibble(
     parameter = grep("^b\\[.+\\]$", varnames_GT, value = TRUE),
     x = b_ou_FR$b[1:ind]
 )
-mcmc_areas(test$draws("b"), prob_outer = 0.95) +
+mcmc_areas(test_GT$draws("b"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
     parameter = grep("^phi\\[.+\\]$", varnames_GT, value = TRUE),
     x = 1 - b_ou_FR$phi[1:ind]
 )
-mcmc_areas(test$draws("phi"), prob_outer = 0.95) +
+mcmc_areas(test_GT$draws("phi"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
     parameter = grep("^lambda\\[.+\\]$", varnames_GT, value = TRUE),
     x = b_ou_FR$lambda[1:ind]
 )
-mcmc_areas(test$draws("lambda"), prob_outer = 0.95) +
+mcmc_areas(test_GT$draws("lambda"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
     parameter = grep("^q\\[10,.+\\]$", varnames_GT, value = TRUE),
     x = b_ou_FR$q[10,]
 )
-mcmc_areas(test$draws(grep("^q\\[10,.+\\]$", varnames_GT, value = TRUE)), prob_outer = 0.95) +
+mcmc_areas(test_GT$draws(grep("^q\\[10,.+\\]$", varnames_GT, value = TRUE)), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
     parameter = grep("^N\\[.+\\]$", varnames_GT, value = TRUE),
     x = b_ou_FR$case_true[1:ind, 1]
 )
-mcmc_areas(test$draws("N"), prob_outer = 0.95) +
+mcmc_areas(test_GT$draws("N"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
+param_true = tibble(
+    parameter = grep("^beta_t\\[.+\\]$", varnames_GT, value = TRUE),
+    x = beta_t_scaled[1:ind]
+)
+mcmc_areas(test_GT$draws("beta_t"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 ```
 
@@ -312,11 +311,31 @@ test$draws("N")
 vanilla <- test$summary(variables = "N")$mean
 withGT <- test_GT$summary(variables = "N")$mean
 
-# 31.67639
-sqrt(mean((vanilla - b_ou_FR$case_true[1:ind])^2, na.rm = TRUE))
+error_metrics <- function(predicted, actual) {
+  # same length
+  stopifnot(length(predicted) == length(actual))
+  
+  # RMSE (Root Mean Squared Error)
+  rmse <- sqrt(mean((predicted - actual)^2))
+  
+  # RMSPE (Root Mean Squared Percentage Error)
+  rmspe <- sqrt(mean(((predicted - actual)/actual)^2)) * 100
+  
+  # MAE (Mean Absolute Error)
+  mae <- mean(abs(predicted - actual))
+  
+  # MAPE (Mean Absolute Percentage Error)
+  mape <- mean(abs((predicted - actual)/actual)) * 100
 
-# 29.16432
-sqrt(mean((withGT - b_ou_FR$case_true[1:ind])^2, na.rm = TRUE))
+  list(RMSE = rmse,
+       RMSPE = rmspe,
+       MAE = mae,
+       MAPE = mape)
+}
+
+print(error_metrics(vanilla, b_ou_FR$case_true[1:ind]))
+
+print(error_metrics(withGT, b_ou_FR$case_true[1:ind]))
 ```
 
 
