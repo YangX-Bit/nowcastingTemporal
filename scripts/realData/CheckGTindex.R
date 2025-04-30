@@ -62,7 +62,7 @@ for (i in seq_along(InfoDengue)) {
   cor.index.log[i] <- cor(plot_data$log_cases, plot_data$gt_index)
 
   p[[i]] <- ggplot(plot_data, aes(x = date)) +
-    geom_line(aes(y = log_cases), color = "blue", size = 1) +
+    geom_line(aes(y = scaled_cases), color = "blue", size = 1) +
     geom_line(aes(y = gt_index), color = "red", size = 1) +
     labs(
       title = paste0("Comparison Plot of ", brazil_ufs[i]),

@@ -29,9 +29,95 @@ posterior_draws_path = file.path(path_source_nowcasting, "data", "draws", "testE
 b_ou <-  file.path(path_source_nowcasting, "models", "b-ou.stan")
 model <- cmdstan_model(b_ou)
 
-b_ou_lambda <- file.path(path_proj, "source", "models", "b-ou-GT.stan")
+b_ou_lambda <- file.path(path_proj, "source", "models", "b-ou-GT-combined.stan")
 model_GT <- cmdstan_model(b_ou_lambda)
 ```
+# GT
+```{r}
+# 1. Parameter settings
+set.seed(123)
+T <- 60                   # number of time points
+mu <- 30                   # GT peak position
+sig <- 15                  # GT peak width
+
+# Noise heteroscedasticity parameters
+alpha      <- 2           # baseline noise level
+beta_noise <- 0.05        # noise coefficient proportional to GT
+
+# AR(1) parameters for time-varying beta_GT_t
+mean_betaGT <- 0.5        # long-term mean of beta_GT
+rho_betaGT  <- 0.9        # AR(1) autocorrelation for beta_GT
+sigma_beta  <- 0.05       # innovation standard deviation for beta_GT
+
+# AR(1) parameters for residual eta
+rho_eta    <- 0.8         # autocorrelation of eta
+sigma_eta  <- 0.2         # innovation standard deviation of eta
+
+# Intercept
+beta0 <- 3                # fixed intercept
+
+# 2. Simulate Google Trends (GT) data
+t        <- 1:T
+gt_base  <- 100 * exp(-(t - mu)^2 / (2 * sig^2))         # bell-shaped base trend
+noise_sd <- alpha + beta_noise * gt_base                # heteroscedastic noise sd
+gt_noisy <- gt_base + rnorm(T, sd = noise_sd)            # add noise
+GT       <- round(pmin(100, pmax(0, gt_noisy)))          # truncate to [0,100] and round
+
+# Standardize GT
+ZT <- (GT - mean(GT)) / sd(GT)                           # zero-mean, unit-variance
+
+# 3. Simulate time-varying coefficient beta_GT_t via AR(1)
+beta_GT <- numeric(T)
+beta_GT[1] <- rnorm(1, mean = mean_betaGT, sd = sigma_beta)
+for (i in 2:T) {
+  beta_GT[i] <- rho_betaGT * beta_GT[i-1] +
+                (1 - rho_betaGT) * mean_betaGT +
+                rnorm(1, sd = sigma_beta)
+}
+
+# 4. Simulate AR(1) residual eta_t
+eta <- numeric(T)
+eta[1] <- rnorm(1, sd = sigma_eta)
+for (i in 2:T) {
+  eta[i] <- rho_eta * eta[i-1] + rnorm(1, sd = sigma_eta)
+}
+
+# 5. Construct raw log_lambda and scale it to [3, 7]
+raw_log_lambda <- beta0 + beta_GT * ZT + eta
+
+# Scaling function to map x to [new_min, new_max]
+scale_to_range <- function(x, new_min, new_max) {
+  (x - min(x)) / (max(x) - min(x)) * (new_max - new_min) + new_min
+}
+
+log_lambda <- scale_to_range(raw_log_lambda, 3, 7)       # now in [3,7]
+lambda     <- exp(log_lambda)
+
+# 6. Visualize results
+par(mfrow = c(3,1), mar = c(4,4,3,1))
+plot(t, raw_log_lambda, type = "l", col = "gray",
+     main = "Raw log_lambda (unscaled)", ylab = "raw log(λ)", xlab = "t")
+abline(h = c(min(raw_log_lambda), max(raw_log_lambda)), lty = 2, col = "gray")
+plot(t, log_lambda, type = "l", col = "blue",
+     main = "Scaled log_lambda ∈ [3,7]", ylab = "scaled log(λ)", xlab = "t")
+abline(h = c(3,7), lty = 2, col = "blue")
+plot(t, lambda, type = "l", col = "darkgreen",
+     main = expression("Simulated " * lambda[t]), ylab = expression(lambda[t]), xlab = "t")
+
+# 7. Show first few entries
+head(data.frame(
+  t              = t,
+  GT             = GT,
+  beta_GT        = round(beta_GT, 3),
+  eta            = round(eta, 3),
+  raw_log_lambda = round(raw_log_lambda, 3),
+  log_lambda     = round(log_lambda, 3),
+  lambda         = round(lambda, 1)
+))
+
+```
+
+
 
 ## Fully reported scenario
 
@@ -92,6 +178,8 @@ cor(log(b_ou_FR$case_true), gt_with_noise)
 
 plot(ts( as.numeric(case_true_FR_normalized)))
 lines(as.numeric(gt_with_noise))
+
+
 ```
 
 
