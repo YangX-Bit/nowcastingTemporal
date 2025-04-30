@@ -1,3 +1,5 @@
+library(tidyverse)
+
 path_source_denguetracker_GT <- file.path(path_source_denguetracker_data, "gtrends")
 
 win_end_ew <- "202452"
@@ -44,16 +46,19 @@ for (i in c(1:length(brazil_ufs))) {
 
 p <- list()
 cor.index <- numeric(length(InfoDengue))
+cor.index.scale <- numeric(length(InfoDengue))
 cor.index.log <- numeric(length(InfoDengue))
 
 for (i in seq_along(InfoDengue)) {
   plot_data <- data.frame(
     date = as.Date(InfoDengue[[i]]$ew_start),
+    sum_of_cases = InfoDengue[[i]]$sum_of_cases,
     scaled_cases = InfoDengue[[i]]$scaled_cases,
     log_cases = InfoDengue[[i]]$log_cases,
     gt_index = GT_index[[i]][, 1]
   ) 
-  cor.index[i] <- cor(plot_data$scaled_cases, plot_data$gt_index)
+  cor.index[i] <- cor(plot_data$sum_of_cases, plot_data$gt_index)
+  cor.index.scale[i] <- cor(plot_data$scaled_cases, plot_data$gt_index)
   cor.index.log[i] <- cor(plot_data$log_cases, plot_data$gt_index)
 
   p[[i]] <- ggplot(plot_data, aes(x = date)) +

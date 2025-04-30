@@ -32,7 +32,7 @@ data_root_dir <- "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekl
 # Input matrix of BRdengue, SP state
 rj_delay_matrix <- get_infodengue_data(root_dir = data_root_dir,
                          202410, 202452, "RJ",
-                         D = 15, fill_missing = T)$RJ
+                         D = 15)$RJ
 rj_delay_matrix[15,1] <- round(rj_delay_matrix[15,2]/2)
 
 matplot(t(log(rj_delay_matrix)), type = "l", lty = 1, col = rainbow(nrow(rj_delay_matrix)))
@@ -66,7 +66,7 @@ ggplot(smoothed_b_rj, aes(x = date, y = b)) +
 
 ```{r}
 ind = 202452 - 202410 + 1
-test_length <- 8 #8 weeks
+test_length <- 10 #8 weeks
 hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 rj_delay_matrix[is.na(rj_delay_matrix)] <- 0
 stan_data <- c(list(T = ind, D = 15, Y = rj_delay_matrix), hypers)
@@ -108,5 +108,20 @@ error_metrics(tail(mean_N_ARABM, test_length),
 ```{r}
 error_metrics(mean_N_ARABM, 
      rj_actual_cases$sum_of_cases)
+```
+```{r}
+error_metrics <- function(pred, actual) {
+  rmse <- sqrt(mean((pred - actual)^2, na.rm = TRUE))
+  rmspe <- sqrt(mean(((pred - actual) / actual)^2, na.rm = TRUE)) * 100
+  mae <- mean(abs(pred - actual), na.rm = TRUE)
+  mape <- mean(abs((pred - actual) / actual), na.rm = TRUE) * 100
+  
+  list(
+    RMSE = rmse,
+    RMSPE = rmspe,
+    MAE = mae,
+    MAPE = mape
+  )
+}
 ```
 

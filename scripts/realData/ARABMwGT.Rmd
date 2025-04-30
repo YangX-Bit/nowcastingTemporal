@@ -32,10 +32,9 @@ source(file.path(path_source_nowcasting, "functions", "plot_function.R"))
 data_root_dir <- "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue"
 # Input matrix of BRdengue, SP state
 rj_delay_matrix <- get_infodengue_data(root_dir = data_root_dir,
-                         202410, 202452, "RJ",
-                         D = 15, fill_missing = T)$RJ
+                         202410, 202452, "RJ", D = 15)$RJ
 rj_delay_matrix[15,1] <- round(rj_delay_matrix[15,2]/2)
-rj_delay_matrix_scaled <- log_minmax_scale_df(rj_delay_matrix)
+# rj_delay_matrix_scaled <- log_minmax_scale_df(rj_delay_matrix)
 
 matplot(t(log(rj_delay_matrix)), type = "l", lty = 1, col = rainbow(nrow(rj_delay_matrix)))
 ```
@@ -68,13 +67,13 @@ covars_matrix <- as.matrix(gt[,c(2,3)])
 
 ```{r}
 ind = 202452 - 202410 + 1
-test_length <- 8
+test_length <- 5
 hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 rj_delay_matrix[is.na(rj_delay_matrix)] <- 0
 stan_data <- c(list(T = ind, D = 15, Y = rj_delay_matrix),
                list(K = 1, X = scale(log(covars_matrix[,1]))), hypers)
 
-b_ou_GT <- file.path(path_source, "models", "b-ou-GT-transform.stan")
+b_ou_GT <- file.path(path_source, "models", "b-ou-GT.stan")
 model <- cmdstan_model(b_ou_GT)
 test_ARABMwGT = model$sample(
     data = stan_data,

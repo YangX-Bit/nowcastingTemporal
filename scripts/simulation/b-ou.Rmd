@@ -224,9 +224,10 @@ test$draws("N")
 vanilla <- test$summary(variables = "N")$mean
 withGT <- test_GT$summary(variables = "N")$mean
 
-
+# 31.67639
 sqrt(mean((vanilla - b_ou_FR$case_true[1:ind])^2, na.rm = TRUE))
 
+# 29.16432
 sqrt(mean((withGT - b_ou_FR$case_true[1:ind])^2, na.rm = TRUE))
 ```
 
