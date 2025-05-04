@@ -49,7 +49,7 @@ t <- seq_len(T)
 week <- ((t - 1) %% weeks_per_year) + 1
 
 # 2. Seasonal component: Gaussian peak each year around week 15
-seasonal_amp <- 40
+seasonal_amp <- 3
 seasonal_center <- 15
 seasonal_width <- 5
 seasonal <- seasonal_amp * exp(-((week - seasonal_center)^2) / (2 * seasonal_width^2))
@@ -67,8 +67,8 @@ outbreak <- outbreak_amp * (
 # 4. Combine with heteroscedastic noise to form covariate X1
 alpha_noise <- 2
 beta_noise <- 0.05
-noise_sd <- alpha_noise + beta_noise * (seasonal + outbreak)
-covariate_raw <- seasonal + outbreak + rnorm(T, mean = 0, sd = noise_sd)
+noise_sd <- alpha_noise + beta_noise *  outbreak
+covariate_raw <- outbreak + rnorm(T, mean = 0, sd = noise_sd)
 X1 <- round(pmin(100, pmax(0, covariate_raw)))  # truncate to [0,100] and round
 
 # 5. Simulate time-varying coefficient beta_t via AR(1) and scale to [0.02, 0.04]
@@ -82,7 +82,7 @@ for (i in 2:T) {
     (1 - rho_beta) * mean_beta +
     rnorm(1, mean = 0, sd = sigma_beta)
 }
-beta_t <- scale_to_range(beta_t, 0.6, 0.8)
+beta_t <- scale_to_range(beta_t, 0.2, 0.4)
 
 # 6. Simulate AR(1) residual eta_t
 rho_eta <- 0.8
@@ -94,9 +94,9 @@ for (i in 2:T) {
 }
 
 # 7. Construct raw_log_lambda and exponentiate to get lambda
-beta0 <- 4
+beta0 <- 2
 ZT <- (X1 - mean(X1)) / sd(X1)  # standardize covariate
-raw_log_lambda <- beta0 + beta_t * ZT + eta
+raw_log_lambda <- beta0 + beta_t * ZT + eta + seasonal
 lambda <- exp(raw_log_lambda)
 
 # 8. (Optional) Visualize the components and lambda
@@ -109,6 +109,7 @@ plot(t, outbreak, type = "l", col = "red", main = "Outbreak Component",
      ylab = "outbreak", xlab = "Time")
 plot(t, lambda, type = "l", col = "darkgreen", main = expression(lambda[t]),
      ylab = expression(lambda[t]), xlab = "Time")
+
 
 exp(seq(3,8, by = 0.1))
 exp(6.4)
