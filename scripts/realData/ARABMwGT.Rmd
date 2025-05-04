@@ -10,6 +10,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(cmdstanr)
 library(bayesplot)
+library(aweek)
+library(dplyr)
+library(ggplot2)
 ```
 
 ```{r}
@@ -28,11 +31,15 @@ source(file.path(path_source_nowcasting, "functions", "plot_function.R"))
 
 
 ```{r}
+start_week <- 202410
+end_week <- 202433
+start_date <- get_date(week = substr(start_week,5,6), year = substr(start_week,1,4))
+end_date <- get_date(week = substr(end_week,5,6), year = substr(end_week,1,4))
 
 data_root_dir <- "/Users/xiaoy0a/Desktop/GitHub/Dengue/dengue-tracker/data/weekly_data/infodengue"
 # Input matrix of BRdengue, SP state
 rj_delay_matrix <- get_infodengue_data(root_dir = data_root_dir,
-                         202410, 202452, "RJ", D = 15)$RJ
+                         start_week, end_week, "RJ", D = 15)$RJ
 rj_delay_matrix[15,1] <- round(rj_delay_matrix[15,2]/2)
 # rj_delay_matrix_scaled <- log_minmax_scale_df(rj_delay_matrix)
 
@@ -43,7 +50,7 @@ matplot(t(log(rj_delay_matrix)), type = "l", lty = 1, col = rainbow(nrow(rj_dela
 rj_ref_data_root <- file.path(data_root_dir, "202511", "RJ_2025-03-16_infodengue.csv")
 rj_ref_data <- read.csv(rj_ref_data_root)
 # we start from 202410
-rj_actual_cases <- rj_ref_data %>% filter(ew >= 202410 & ew <= 202452) %>%
+rj_actual_cases <- rj_ref_data %>% filter(ew >= start_week & ew <= end_week) %>%
   select(ew_start, ew, sum_of_cases)
 ```
 
@@ -57,23 +64,20 @@ gt[, -1] <- lapply(gt[, -1], function(x) {
   as.numeric(ifelse(x == "<1", 0.5, x))
 })
 
-start_date <- get_date(week = 10, year = 2024)
-end_date <- get_date(week = 52, year = 2024)
-
 gt <- gt %>% filter(date <= end_date & date >= start_date)
 covars_matrix <- as.matrix(gt[,c(2,3)])
 ```
 
 
 ```{r}
-ind = 202452 - 202410 + 1
+ind = as.numeric(ceiling((end_date - start_date + 1)/7))
 test_length <- 5
 hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 rj_delay_matrix[is.na(rj_delay_matrix)] <- 0
 stan_data <- c(list(T = ind, D = 15, Y = rj_delay_matrix),
-               list(K = 1, X = scale(log(covars_matrix[,1]))), hypers)
+               list(K = 1, X = matrix(covars_matrix[,1])), hypers)
 
-b_ou_GT <- file.path(path_source, "models", "b-ou-GT.stan")
+b_ou_GT <- file.path(path_source, "models", "b-ou-GT-combined.stan")
 model <- cmdstan_model(b_ou_GT)
 test_ARABMwGT = model$sample(
     data = stan_data,

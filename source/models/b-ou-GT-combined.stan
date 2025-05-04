@@ -69,11 +69,11 @@ model {
 
   // RW-1 for β_{k,t}
   for (k in 1:K) {
-    beta_t[k,1] ~ normal(0, 0.005);
+    beta_t[k,1] ~ normal(0.03, 0.01);
     for (t in 2:T)
       beta_t[k,t] ~ normal(beta_t[k,t-1], sigma_beta);
   }
-  sigma_beta ~ normal(0, 0.5);
+  sigma_beta ~ normal(0, 0.005);
 
   // OU processes for log_b and logit_phi
   log_b[1]      ~ normal(mu_log_b, sigma_log_b);
