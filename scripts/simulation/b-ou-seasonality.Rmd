@@ -40,77 +40,87 @@ scale_to_range <- function(x, new_min, new_max) {
   (x - min(x)) / (max(x) - min(x)) * (new_max - new_min) + new_min
 }
 
-# 1. Parameter settings
-set.seed(123)
-years <- 3
-weeks_per_year <- 52
-Time_len <- years * weeks_per_year
-t <- seq_len(Time_len)
-week <- ((t - 1) %% weeks_per_year) + 1
+# 1. Basic settings
+set.seed(3)
+years         <- 3
+weeks_per_yr  <- 52
+T_len         <- years * weeks_per_yr
+t             <- seq_len(T_len)
+week          <- ((t - 1) %% weeks_per_yr) + 1
 
-# 2. Seasonal component: Gaussian peak each year around week 15
-seasonal_amp <- 5
-seasonal_center <- 15
-seasonal_width <- 4
-seasonal <- seasonal_amp * exp(-((week - seasonal_center)^2) / (2 * seasonal_width^2))
+# 2. Simulate seasonal effect s_true via cyclic second-order random walk
+P             <- weeks_per_yr
+sigma_s_true  <- 1.0    # innovation SD for the RW
+s_true        <- numeric(P)
+# initialize first two points
+s_true[1]     <- rnorm(1, 0, sigma_s_true)
+s_true[2]     <- rnorm(1, 0, sigma_s_true)
+# cyclic second-order RW over weeks
+for (p in 3:P) {
+  s_true[p] <- rnorm(1,
+                     mean = 2 * s_true[p-1] - s_true[p-2],
+                     sd   = sigma_s_true)
+}
+# enforce cyclic boundary conditions
+s_true[1] <- rnorm(1, 2 * s_true[P] - s_true[P-1], sigma_s_true)
+s_true[2] <- rnorm(1, 2 * s_true[1] - s_true[P],     sigma_s_true)
 
-# 3. Outbreak component: larger Gaussian peaks in years 1 & 3 during Mar–May
-outbreak_amp <- 40
-outbreak_width <- 2
-peak1 <- seasonal_center
-peak3 <- seasonal_center + 2 * weeks_per_year
-outbreak <- outbreak_amp * (
-  exp(-((t - peak1)^2) / (2 * outbreak_width^2)) +
-    exp(-((t - peak3)^2) / (2 * outbreak_width^2))
+# 3. Map seasonal effect onto a controlled interval for scaling
+new_min_s <- -2    # choose as needed
+new_max_s <-  2
+s_true_scaled <- scale_to_range(s_true, new_min_s, new_max_s)
+
+# 4. Assign seasonal effect to each time point
+s_t <- s_true_scaled[week]
+
+# 5. Simulate outbreak component (two Gaussian peaks)
+outbreak_amp  <- 40
+peak1         <- 15                  # first-year peak at week 15
+peak3         <- peak1 + 2*weeks_per_yr
+outbreak      <- outbreak_amp * (
+  exp(-((t - peak1)^2)  / (2 * 2^2)) +
+    exp(-((t - peak3)^2) / (2 * 2^2))
 )
 
-# 4. Combine with heteroscedastic noise to form covariate X1
-alpha_noise <- 2
-beta_noise <- 0.05
-noise_sd <- alpha_noise + beta_noise *  outbreak
-covariate_raw <- outbreak + rnorm(Time_len, mean = 0, sd = noise_sd)
-X1 <- round(pmin(100, pmax(0, covariate_raw)))  # truncate to [0,100] and round
+# 6. Build covariate X1 = outbreak + heteroscedastic noise
+alpha_noise   <- 2
+beta_noise    <- 0.05
+noise_sd      <- alpha_noise + beta_noise * outbreak
+cov_raw       <- outbreak + rnorm(T_len, 0, noise_sd)
+X1            <- round(pmin(100, pmax(0, cov_raw)))  # truncate to [0,100]
+ZT            <- (X1 - mean(X1)) / sd(X1)            # standardize for Stan
 
-# 5. Simulate time-varying coefficient beta_t via AR(1) and scale to [0.02, 0.04]
-mean_beta <- 0.1
-rho_beta <- 0.9
-sigma_beta <- 0.02
-beta_t <- numeric(Time_len)
-beta_t[1] <- rnorm(1, mean = mean_beta, sd = sigma_beta)
-for (i in 2:Time_len) {
-  beta_t[i] <- rho_beta * beta_t[i - 1] +
-    (1 - rho_beta) * mean_beta +
-    rnorm(1, mean = 0, sd = sigma_beta)
-}
-beta_t <- scale_to_range(beta_t, 0.05, 0.1)
+# 7. Simulate independent β_t ~ Normal(0, sigma_beta_true)
+sigma_beta_true <- 0.005
+beta_t_true     <- rnorm(T_len, 0, sigma_beta_true)
 
-# 6. Simulate AR(1) residual eta_t
-rho_eta <- 0.8
-sigma_eta <- 0.5
-eta <- numeric(Time_len)
-eta[1] <- rnorm(1, mean = 0, sd = sigma_eta)
-for (i in 2:Time_len) {
-  eta[i] <- rho_eta * eta[i - 1] + rnorm(1, mean = 0, sd = sigma_eta)
+# 8. Simulate AR(1) residual η_t
+rho_eta_true    <- 0.8
+sigma_eta_true  <- 0.5
+eta             <- numeric(T_len)
+eta[1]          <- rnorm(1, 0, sigma_eta_true)
+for (i in 2:T_len) {
+  eta[i] <- rnorm(1, rho_eta_true * eta[i-1], sigma_eta_true)
 }
 
-# 7. Construct raw_log_lambda and exponentiate to get lambda
-beta0 <- 2
-ZT <- (X1 - mean(X1)) / sd(X1)  # standardize covariate
-raw_log_lambda <- beta0 + beta_t * ZT + eta + seasonal
-lambda <- exp(raw_log_lambda)
+# 9. Construct log-lambda and draw counts N_t
+beta0_true    <- 2.5               # manually set intercept for scale
+log_lambda    <- beta0_true + beta_t_true * ZT + eta + s_t
+lambda        <- exp(log_lambda)
+N             <- rpois(T_len, lambda)
 
-# 8. (Optional) Visualize the components and lambda
-par(mfrow = c(4, 1), mar = c(4, 4, 2, 1))
-plot(t, X1, type = "l", col = "blue", main = "Covariate X1 (Seasonal + Outbreak)",
-     ylab = "X1", xlab = "Time")
-plot(t, seasonal, type = "l", col = "green", main = "Seasonal Component",
-     ylab = "seasonal", xlab = "Time")
-plot(t, outbreak, type = "l", col = "red", main = "Outbreak Component",
-     ylab = "outbreak", xlab = "Time")
-plot(t, lambda, type = "l", col = "darkgreen", main = expression(lambda[t]),
-     ylab = expression(lambda[t]), xlab = "Time")
+# 10. Build Y matrix (no delays: only first column)
+D             <- 5
+Y             <- matrix(0L, nrow = T_len, ncol = D + 1)
+Y[, 1]        <- N
 
-cor(ZT,lambda)
+# 11. Quick plots to verify
+par(mfrow = c(4,1), mar = c(4,4,2,1))
+plot(t, X1,          type = 'l', main = 'Covariate X1',     ylab = 'X1',         xlab = 'Time')
+plot(t, s_t,         type = 'l', main = 'Seasonal s_t',     ylab = 's_t',        xlab = 'Time')
+plot(t, beta_t_true, type = 'l', main = expression(beta[t]), ylab = expression(beta[t]), xlab = 'Time')
+plot(t, lambda,      type = 'l', main = expression(lambda[t]), ylab = expression(lambda[t]), xlab = 'Time')
+
 ```
 
 ## Fully reported scenario
@@ -138,7 +148,7 @@ params_b_ou_FR <- list(
   data = list(
     alpha_lamb = alpha_lamb,
     beta_lamb  = beta_lamb,
-    T       = Time_len,
+    T       = T_len,
     date_start = as.Date("2024-01-01"),
     D = D
   ),
@@ -169,32 +179,33 @@ withGT <- list()
 ### Model fitting
 
 ```{r}
-ind = seq(10,151, by = 20)
+ind = seq(20, 156, by = 20)
 varnames <- list()
 vanilla <- list()
-
+test <- list()
 hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 for (i in 1:length(ind)) {
   print(paste0("The ",i,"th simulation."))
   stan_data <- c(list(T = ind[i], D = D, Y = b_ou_FR$case_reported_cumulated[1:ind[i], ]), hypers)
-  test = model$sample(
+  test[[i]] = model$sample(
     data = stan_data,
     iter_sampling = 3000,
     iter_warmup = 2000,
     chains = 1,
     refresh = 0,
     thin = 1)
-  varnames[[i]] <- test$summary()$variable
-  vanilla[[i]] <- test$summary(variables = "N")$mean
+  varnames[[i]] <- test[[i]]$summary()$variable
+  vanilla[[i]] <- test[[i]]$summary(variables = "N")$mean
 }
+
 
 
 ```
 
 ```{r}
-ind = seq(10,151, by = 20)
 varnames_GT <- list()
 withGT <- list()
+test_GT <- list()
 hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 for (i in 1:length(ind)) {
   print(paste0("The ",i,"th simulation."))
@@ -202,18 +213,41 @@ for (i in 1:length(ind)) {
   stan_data_GT <- c(list(T = ind[i], D = D, Y = b_ou_FR$case_reported_cumulated[1:ind[i], ]), hypers, 
                list(K = ncol(matrix(ZT)), X = as.matrix(matrix(ZT)[1:ind[i], 1]),
                     P = 52, w=w))
-test_GT = model_GT$sample(
+test_GT[[i]] = model_GT$sample(
     data = stan_data_GT,
     iter_sampling = 3000,
     iter_warmup = 2000,
     chains = 1,
     refresh = 500,
     thin = 1)
-  varnames_GT[[i]] <- test_GT$summary()$variable
-  withGT[[i]] <- test_GT$summary(variables = "N")$mean
+  varnames_GT[[i]] <- test_GT[[i]]$summary()$variable
+  withGT[[i]] <- test_GT[[i]]$summary(variables = "N")$mean
 }
 ```
+
 ```{r}
+error_metrics <- function(predicted, actual) {
+  # same length
+  stopifnot(length(predicted) == length(actual))
+  
+  # RMSE (Root Mean Squared Error)
+  rmse <- sqrt(mean((predicted - actual)^2))
+  
+  # RMSPE (Root Mean Squared Percentage Error)
+  rmspe <- sqrt(mean(((predicted - actual)/actual)^2)) * 100
+  
+  # MAE (Mean Absolute Error)
+  mae <- mean(abs(predicted - actual))
+  
+  # MAPE (Mean Absolute Percentage Error)
+  mape <- mean(abs((predicted - actual)/actual)) * 100
+
+  list(RMSE = rmse,
+       RMSPE = rmspe,
+       MAE = mae,
+       MAPE = mape)
+}
+
 vanilla_combined <- list()
 withGT_combined <- list()
 for (i in 1:(length(ind)-1)) {
@@ -251,6 +285,73 @@ mean_vanilla_combined_last
 mean_withGT_combined_last
 ```
 
+```{r}
+varnames_GT[[3]]
+mcmc_areas(test_GT$draws("sigma_log_b"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT$draws("sigma_logit_phi"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT$draws("theta_log_b"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT$draws("theta_logit_phi"), prob = 0.95, prob_outer = 0.95)
+
+mcmc_areas(test_GT$draws("mu_log_b"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT$draws("mu_logit_phi"), prob = 0.95, prob_outer = 0.95)
+
+
+param_true = tibble(
+    parameter = grep("^b\\[.+\\]$", varnames_GT[[3]], value = TRUE),
+    x = b_ou_FR$b[1:ind[3]]
+)
+mcmc_areas(test_GT$draws("b"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^phi\\[.+\\]$", varnames_GT[[3]], value = TRUE),
+    x = 1 - b_ou_FR$phi[1:ind[3]]
+)
+mcmc_areas(test_GT$draws("phi"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^lambda\\[.+\\]$", varnames_GT[[3]], value = TRUE),
+    x = b_ou_FR$lambda[1:ind[3]]
+)
+mcmc_areas(test_GT$draws("lambda"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^q\\[10,.+\\]$", varnames_GT[[3]], value = TRUE),
+    x = b_ou_FR$q[10,]
+)
+mcmc_areas(test_GT$draws(grep("^q\\[10,.+\\]$", varnames_GT[[3]], value = TRUE)), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^N\\[.+\\]$", varnames_GT[[3]], value = TRUE),
+    x = b_ou_FR$case_true[1:ind[3], 1]
+)
+mcmc_areas(test_GT$draws("N"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^beta_t\\[.+\\]$", varnames_GT[[3]], value = TRUE),
+    x = beta_t_true[1:ind[3]]
+)
+mcmc_areas(test_GT$draws("beta_t"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^beta_t\\[.+\\]$", varnames_GT[[3]], value = TRUE),
+    x = beta_t_true[1:ind[3]]
+)
+mcmc_areas(test_GT$draws("beta_t"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^s_t\\[.+\\]$", varnames_GT[[3]], value = TRUE),
+    x = s_t[1:ind[3]]
+)
+mcmc_areas(test_GT$draws("s_t"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+```
 
 ## Non-fully reported scenario
 
@@ -281,152 +382,54 @@ plot(b_ou_NFR$phi, pch = 19, type = "b")
 par(mfrow = c(1, 1))
 matplot(t(b_ou_NFR$q), type = "l", lty = 1, ylim = c(0, 1))
 
-cor(GT, b_ou_NFR$case_true)
 ```
 
 ### Model fitting
 
 ```{r}
-ind = 40
+ind = seq(20, 156, by = 20)
+varnames_NFR <- list()
+vanilla_NFR <- list()
+test_NFR <- list()
 hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
-stan_data <- c(list(T = ind, D = D, Y = b_ou_NFR$case_reported_cumulated[1:ind, ]), hypers)
-
-test = model$sample(
+for (i in 1:length(ind)) {
+  print(paste0("The ",i,"th simulation."))
+  stan_data <- c(list(T = ind[i], D = D, Y = b_ou_NFR$case_reported_cumulated[1:ind[i], ]), hypers)
+  test_NFR[[i]] = model$sample(
     data = stan_data,
     iter_sampling = 3000,
-    iter_warmup = 3000,
+    iter_warmup = 2000,
     chains = 1,
     refresh = 0,
     thin = 1)
-varnames <- test$summary()$variable
+  varnames_NFR[[i]] <- test_NFR[[i]]$summary()$variable
+  vanilla_NFR[[i]] <- test_NFR[[i]]$summary(variables = "N")$mean
+}
 
-mcmc_areas(test$draws("sigma_log_b"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test$draws("sigma_logit_phi"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test$draws("theta_log_b"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test$draws("theta_logit_phi"), prob = 0.95, prob_outer = 0.95)
-
-mcmc_areas(test$draws("mu_log_b"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test$draws("mu_logit_phi"), prob = 0.95, prob_outer = 0.95)
-
-mcmc_areas(test_GT$draws("beta_0"), prob = 0.95, prob_outer = 0.95)
-
-param_true = tibble(
-    parameter = grep("^b\\[.+\\]$", varnames, value = TRUE),
-    x = b_ou_NFR$b[1:ind]
-)
-mcmc_areas(test$draws("b"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
-
-param_true = tibble(
-    parameter = grep("^phi\\[.+\\]$", varnames, value = TRUE),
-    x = b_ou_NFR$phi[1:ind]
-)
-mcmc_areas(test$draws("phi"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
-
-param_true = tibble(
-    parameter = grep("^lambda\\[.+\\]$", varnames, value = TRUE),
-    x = b_ou_NFR$lambda[1:ind]
-)
-mcmc_areas(test$draws("lambda"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
-
-param_true = tibble(
-    parameter = grep("^q\\[10,.+\\]$", varnames, value = TRUE),
-    x = b_ou_NFR$q[10,]
-)
-mcmc_areas(test$draws(grep("^q\\[10,.+\\]$", varnames, value = TRUE)), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
-
-param_true = tibble(
-    parameter = grep("^N\\[.+\\]$", varnames, value = TRUE),
-    x = b_ou_NFR$case_true[1:ind, 1]
-)
-mcmc_areas(test$draws("N"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
 ```
 
 ```{r}
-ind = 40
+varnames_GT_NFR <- list()
+withGT_NFR <- list()
+test_GT_NFR <- list()
 hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
-stan_data_GT <- c(list(T = ind, D = D, Y = b_ou_NFR$case_reported_cumulated[1:ind, ]), hypers, 
-               list(K = ncol(matrix(GT)), X = as.matrix(matrix(GT)[1:ind, 1])) )
-
-test_GT = model_GT$sample(
-    data = stan_data_GT,
+for (i in 1:length(ind)) {
+  print(paste0("The ",i,"th simulation."))
+  w = rep(1:P,3)[1:ind[i]]
+  stan_data_GT_NFR <- c(list(T = ind[i], D = D, Y = b_ou_NFR$case_reported_cumulated[1:ind[i], ]), hypers, 
+               list(K = ncol(matrix(ZT)), X = as.matrix(matrix(ZT)[1:ind[i], 1]),
+                    P = 52, w=w))
+test_GT_NFR[[i]] = model_GT$sample(
+    data = stan_data_GT_NFR,
     iter_sampling = 3000,
     iter_warmup = 2000,
     chains = 1,
     refresh = 500,
     thin = 1)
-varnames_GT <- test_GT$summary()$variable
-
-mcmc_areas(test_GT$draws("sigma_log_b"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_GT$draws("sigma_logit_phi"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_GT$draws("theta_log_b"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_GT$draws("theta_logit_phi"), prob = 0.95, prob_outer = 0.95)
-
-mcmc_areas(test_GT$draws("mu_log_b"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_GT$draws("mu_logit_phi"), prob = 0.95, prob_outer = 0.95)
-
-
-param_true = tibble(
-    parameter = grep("^b\\[.+\\]$", varnames_GT, value = TRUE),
-    x = b_ou_FR$b[1:ind]
-)
-mcmc_areas(test_GT$draws("b"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
-
-param_true = tibble(
-    parameter = grep("^phi\\[.+\\]$", varnames_GT, value = TRUE),
-    x = 1 - b_ou_FR$phi[1:ind]
-)
-mcmc_areas(test_GT$draws("phi"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
-
-param_true = tibble(
-    parameter = grep("^lambda\\[.+\\]$", varnames_GT, value = TRUE),
-    x = b_ou_FR$lambda[1:ind]
-)
-mcmc_areas(test_GT$draws("lambda"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
-
-param_true = tibble(
-    parameter = grep("^q\\[10,.+\\]$", varnames_GT, value = TRUE),
-    x = b_ou_FR$q[10,]
-)
-mcmc_areas(test_GT$draws(grep("^q\\[10,.+\\]$", varnames_GT, value = TRUE)), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
-
-param_true = tibble(
-    parameter = grep("^N\\[.+\\]$", varnames_GT, value = TRUE),
-    x = b_ou_FR$case_true[1:ind, 1]
-)
-mcmc_areas(test_GT$draws("N"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
-
-param_true = tibble(
-    parameter = grep("^beta_t\\[.+\\]$", varnames_GT, value = TRUE),
-    x = beta_t_scaled[1:ind]
-)
-mcmc_areas(test_GT$draws("beta_t"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
-
+  varnames_GT_NFR[[i]] <- test_GT_NFR[[i]]$summary()$variable
+  withGT_NFR[[i]] <- test_GT_NFR[[i]]$summary(variables = "N")$mean
+}
 
 
 ```
 
-```{r}
-vanilla <- test$summary(variables = "N")$mean
-withGT <- test_GT$summary(variables = "N")$mean
-
-
-
-print(error_metrics(vanilla[1:ind], b_ou_NFR$case_true[1:ind]))
-
-print(error_metrics(withGT[1:ind], b_ou_NFR$case_true[1:ind]))
-
-print(error_metrics(tail(vanilla[1:ind],5), tail(b_ou_NFR$case_true[1:ind],5)))
-
-print(error_metrics(tail(withGT[1:ind],5), tail(b_ou_NFR$case_true[1:ind],5)))
-```
