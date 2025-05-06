@@ -12,6 +12,7 @@ library(ggplot2)
 library(reshape2)
 library(dplyr)
 library(bayesplot)
+library(scoringRules)
 ```
 
 ```{r}
@@ -286,6 +287,79 @@ mean_withGT_combined_last
 ```
 
 ```{r}
+test_num <- 7
+
+# GT
+y_true <- b_ou_FR$case_true[1:ind[test_num]]
+
+y_rep_mat <- test[[test_num]]$draws(variables = "N", format = "draws_matrix")
+pred_mat <- t(y_rep_mat)
+
+crps_vec  <- crps_sample(y   = y_true,  
+                         dat = pred_mat)
+mean_crps <- mean(crps_vec)
+
+#
+y_rep_mat_GT <- test_GT[[test_num]]$draws(variables = "N", format = "draws_matrix")
+pred_mat_GT <- t(y_rep_mat_GT)
+
+crps_vec_GT  <- crps_sample(y   = y_true,  
+                         dat = pred_mat_GT)
+mean_crps_GT <- mean(crps_vec_GT)
+
+mean_crps
+mean_crps_GT
+```
+
+
+```{r}
+mcmc_areas(test[[7]]$draws("sigma_log_b"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test[[7]]$draws("sigma_logit_phi"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test[[7]]$draws("theta_log_b"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test[[7]]$draws("theta_logit_phi"), prob = 0.95, prob_outer = 0.95)
+
+mcmc_areas(test[[7]]$draws("mu_log_b"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test[[7]]$draws("mu_logit_phi"), prob = 0.95, prob_outer = 0.95)
+
+
+param_true = tibble(
+    parameter = grep("^b\\[.+\\]$", varnames[[7]], value = TRUE),
+    x = b_ou_FR$b[1:ind[7]]
+)
+mcmc_areas(test[[7]]$draws("b"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^phi\\[.+\\]$", varnames[[7]], value = TRUE),
+    x = 1 - b_ou_FR$phi[1:ind[7]]
+)
+mcmc_areas(test[[7]]$draws("phi"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^lambda\\[.+\\]$", varnames[[7]], value = TRUE),
+    x = b_ou_FR$lambda[1:ind[7]]
+)
+mcmc_areas(test[[7]]$draws("lambda"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^q\\[10,.+\\]$", varnames[[7]], value = TRUE),
+    x = b_ou_FR$q[10,]
+)
+mcmc_areas(test[[7]]$draws(grep("^q\\[10,.+\\]$", varnames[[7]], value = TRUE)), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^N\\[.+\\]$", varnames[[7]], value = TRUE),
+    x = b_ou_FR$case_true[1:ind[7], 1]
+)
+mcmc_areas(test[[7]]$draws("N"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+```
+
+
+```{r}
 mcmc_areas(test_GT[[7]]$draws("sigma_log_b"), prob = 0.95, prob_outer = 0.95)
 mcmc_areas(test_GT[[7]]$draws("sigma_logit_phi"), prob = 0.95, prob_outer = 0.95)
 mcmc_areas(test_GT[[7]]$draws("theta_log_b"), prob = 0.95, prob_outer = 0.95)
@@ -297,44 +371,37 @@ mcmc_areas(test_GT[[7]]$draws("mu_logit_phi"), prob = 0.95, prob_outer = 0.95)
 
 param_true = tibble(
     parameter = grep("^b\\[.+\\]$", varnames_GT[[7]], value = TRUE),
-    x = b_ou_NFR$b[1:ind[7]]
+    x = b_ou_FR$b[1:ind[7]]
 )
 mcmc_areas(test_GT[[7]]$draws("b"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
     parameter = grep("^phi\\[.+\\]$", varnames_GT[[7]], value = TRUE),
-    x = 1 - b_ou_NFR$phi[1:ind[7]]
+    x = 1 - b_ou_FR$phi[1:ind[7]]
 )
 mcmc_areas(test_GT[[7]]$draws("phi"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
     parameter = grep("^lambda\\[.+\\]$", varnames_GT[[7]], value = TRUE),
-    x = b_ou_NFR$lambda[1:ind[7]]
+    x = b_ou_FR$lambda[1:ind[7]]
 )
 mcmc_areas(test_GT[[7]]$draws("lambda"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
     parameter = grep("^q\\[10,.+\\]$", varnames_GT[[7]], value = TRUE),
-    x = b_ou_NFR$q[10,]
+    x = b_ou_FR$q[10,]
 )
 mcmc_areas(test_GT[[7]]$draws(grep("^q\\[10,.+\\]$", varnames_GT[[7]], value = TRUE)), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
     parameter = grep("^N\\[.+\\]$", varnames_GT[[7]], value = TRUE),
-    x = b_ou_NFR$case_true[1:ind[7], 1]
+    x = b_ou_FR$case_true[1:ind[7], 1]
 )
 mcmc_areas(test_GT[[7]]$draws("N"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
-
-param_true = tibble(
-    parameter = grep("^beta_t\\[.+\\]$", varnames_GT[[7]], value = TRUE),
-    x = beta_t_true[1:ind[7]]
-)
-mcmc_areas(test_GT[[7]]$draws("beta_t"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
@@ -362,7 +429,7 @@ params_b_ou_NFR <- list(
   data = list(
     alpha_lamb = alpha_lamb,
     beta_lamb  = beta_lamb,
-    T       = Time_len,
+    T       = T_len,
     date_start = as.Date("2024-01-01"),
     D = D
   ),
@@ -382,6 +449,8 @@ par(mfrow = c(1, 1))
 matplot(t(b_ou_NFR$q), type = "l", lty = 1, ylim = c(0, 1))
 
 ```
+
+
 
 ### Model fitting
 
