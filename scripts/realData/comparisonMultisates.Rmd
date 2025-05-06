@@ -33,90 +33,94 @@ path_source_denguetracker_data <- file.path(dirname(path_proj), "dengue-tracker/
 path_source_denguetracker_infodengue <- file.path(path_source_denguetracker_data, "infodengue")
 path_source_denguetracker_GT <- file.path(path_source_denguetracker_data, "gtrends")
 
-posterior_draws_path = file.path("F:/", "draws_p3")
+posterior_draws_path = file.path(dirname(path_proj),"draws")
 ```
 # Parameter settings
 ```{r}
-delay_D <- 5
+delay_D <- 10
 iter_sampling <- 5000
 iter_warmup <- 2000
-window_length <- 5
+window_length <- 10
 step_size <- 1
 
 ew_start <- "202409"
 ew_end <- "202452"
 
 # no state ES
-brazil_ufs <- c(
-  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "GO",
-  "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI",
-  "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO" # "BR"
-)
+# brazil_ufs <- c(
+#   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "GO",
+#   "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI",
+#   "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO" # "BR"
+# )
+
+# Test RJ (0.977), SP (0.972) (big cities), AP(0.7395), "RR" (0.5887), CE (0.8938)
+brazil_ufs <- c("RJ", "SP", "AP", "RR", "CE")
 ```
 
 
 # Model ARABM
 ```{r}
-# 
-# ARABM_result <- list()
-# ARABM_result_out <- list()
-# time_start_ARABM <- Sys.time()
-# for (i in 1:length(brazil_ufs)) {
-#   ARABM_result[[i]] <- run_moving_window(
-#     root_dir_infodengue = path_source_denguetracker_infodengue,
-#     root_dir_GT = path_source_denguetracker_GT,
-#     state = brazil_ufs[i],
-#     full_start = ew_start,
-#     full_end = ew_end,
-#     window_length = window_length,
-#     step_size = step_size,
-#     D = delay_D,
-#     hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
-#                       alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
-#     model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
-#     model_name = "ARABM",
-#     mode = "fixed",
-#     iter_sampling = iter_sampling,
-#     iter_warmup = iter_warmup,
-#     chains = 3,
-#     posterior_draws_path = file.path(posterior_draws_path, "ARABM")
-#   )
-#   ARABM_result_out[[i]] <- extract_N_summary(ARABM_result[[i]], num_N = 1)
-# }
-# time_end_ARABM <- Sys.time()
-# time_end_ARABM - time_start_ARABM
+
+ARABM_result <- list()
+ARABM_result_out <- list()
+time_start_ARABM <- Sys.time()
+for (i in 1:length(brazil_ufs)) {
+  print(paste0("Now is the state ", brazil_ufs[i],"."))
+  ARABM_result[[i]] <- run_moving_window(
+    root_dir_infodengue = path_source_denguetracker_infodengue,
+    root_dir_GT = path_source_denguetracker_GT,
+    state = brazil_ufs[i],
+    full_start = ew_start,
+    full_end = ew_end,
+    window_length = window_length,
+    step_size = step_size,
+    D = delay_D,
+    hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
+                      alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
+    model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
+    model_name = "ARABM",
+    mode = "fixed",
+    iter_sampling = iter_sampling,
+    iter_warmup = iter_warmup,
+    chains = 3,
+    posterior_draws_path = file.path(posterior_draws_path, "ARABM")
+  )
+  ARABM_result_out[[i]] <- extract_N_summary(ARABM_result[[i]], num_N = 1)
+}
+time_end_ARABM <- Sys.time()
+time_end_ARABM - time_start_ARABM
 ```
 
 # Model ARABMwGT
 ```{r}
-# ARABMwGT_result <- list()
-# ARABMwGT_result_out <- list()
-# time_start_ARABMwGT <- Sys.time()
-# for (i in 1:length(brazil_ufs)) {
-#   ARABMwGT_result[[i]] <- run_moving_window(
-#     root_dir_infodengue = path_source_denguetracker_infodengue,
-#     root_dir_GT = path_source_denguetracker_GT,
-#     state = brazil_ufs[i],
-#     full_start = ew_start,
-#     full_end = ew_end,
-#     window_length = window_length,
-#     step_size = step_size,
-#     D = delay_D,
-#     hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
-#                       alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
-#     model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
-#     model_name = "ARABMwGT",
-#     mode = "fixed",
-#     iter_sampling = iter_sampling,
-#     iter_warmup = iter_warmup,
-#     chains = 3,
-#     posterior_draws_path = file.path(posterior_draws_path, "ARABMwGT")
-#   )
-#   ARABMwGT_result_out[[i]] <- extract_N_summary(ARABMwGT_result[[i]], num_N = 1)
-# }
-# time_end_ARABMwGT <- Sys.time()
-# 
-# time_end_ARABMwGT - time_start_ARABMwGT
+ARABMwGT_result <- list()
+ARABMwGT_result_out <- list()
+time_start_ARABMwGT <- Sys.time()
+for (i in 1:length(brazil_ufs)) {
+  ARABMwGT_result[[i]] <- run_moving_window(
+    root_dir_infodengue = path_source_denguetracker_infodengue,
+    root_dir_GT = path_source_denguetracker_GT,
+    state = brazil_ufs[i],
+    full_start = ew_start,
+    full_end = ew_end,
+    window_length = window_length,
+    step_size = step_size,
+    D = delay_D,
+    hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
+                      alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
+    model_file = file.path(path_source, "models", "b-ou-GT-combined.stan"),
+    model_name = "ARABMwGT",
+    mode = "fixed",
+    iter_sampling = iter_sampling,
+    iter_warmup = iter_warmup,
+    chains = 3,
+    posterior_draws_path = file.path(posterior_draws_path, "ARABMwGT")
+  )
+  ARABMwGT_result_out[[i]] <- extract_N_summary(ARABMwGT_result[[i]], num_N = 1)
+}
+time_end_ARABMwGT <- Sys.time()
+
+time_end_ARABMwGT - time_start_ARABMwGT
 ```
 
 ```{r}

@@ -1,5 +1,6 @@
 library(tidyverse)
 
+path_source_denguetracker_data <- file.path(dirname(path_proj), "dengue-tracker/data/weekly_data/")
 path_source_denguetracker_GT <- file.path(path_source_denguetracker_data, "gtrends")
 
 win_end_ew <- "202452"

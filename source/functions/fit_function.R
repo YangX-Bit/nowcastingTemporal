@@ -106,6 +106,7 @@ run_moving_window <- function(root_dir_infodengue, root_dir_GT,
       iter_sampling = iter_sampling,
       iter_warmup = iter_warmup,
       chains = chains,
+      parallel_chains = chains,
       thin = thin,
       refresh = 0,
       output_dir = posterior_draws_path
