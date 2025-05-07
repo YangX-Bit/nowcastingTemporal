@@ -9,11 +9,11 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(cmdstanr)
 library(bayesplot)
+
 ```
 
 # Environment
 ```{r}
-
 path_proj = here::here()
 path_source = file.path(path_proj, "source")
 
@@ -41,20 +41,20 @@ delay_D <- 10
 iter_sampling <- 5000
 iter_warmup <- 2000
 window_length <- 10
-step_size <- 1
+step_size <- 3
 
-ew_start <- "202409"
+ew_start <- "202410"
 ew_end <- "202452"
 
 # no state ES
-# brazil_ufs <- c(
-#   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "GO",
-#   "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI",
-#   "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO" # "BR"
-# )
+ brazil_ufs <- c(
+   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "GO",
+   "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI",
+   "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO" # "BR"
+ )
 
 # Test RJ (0.977), SP (0.972) (big cities), AP(0.7395), "RR" (0.5887), CE (0.8938)
-brazil_ufs <- c("RJ", "SP", "AP", "RR", "CE")
+#brazil_ufs <- c("RJ", "SP", "AP", "RR")
 ```
 
 
@@ -89,6 +89,7 @@ for (i in 1:length(brazil_ufs)) {
 }
 time_end_ARABM <- Sys.time()
 time_end_ARABM - time_start_ARABM
+
 ```
 
 # Model ARABMwGT
@@ -97,7 +98,7 @@ ARABMwGT_result <- list()
 ARABMwGT_result_out <- list()
 time_start_ARABMwGT <- Sys.time()
 for (i in 1:length(brazil_ufs)) {
-  ARABMwGT_result[[i]] <- run_moving_window(
+  ç[[i]] <- run_moving_window(
     root_dir_infodengue = path_source_denguetracker_infodengue,
     root_dir_GT = path_source_denguetracker_GT,
     state = brazil_ufs[i],
@@ -121,6 +122,8 @@ for (i in 1:length(brazil_ufs)) {
 time_end_ARABMwGT <- Sys.time()
 
 time_end_ARABMwGT - time_start_ARABMwGT
+
+
 ```
 
 ```{r}
@@ -139,25 +142,26 @@ load(file.path(path_proj, "data", "results", "ARABMwGT_result_out.RData"))
 
 # Baseline data
 ```{r, warning=FALSE}
-# baseline_list <- list()
-# for (i in 1:length(brazil_ufs)) {
-#   baseline_list[[i]] <- get_baseline_data(
-#     root_dir = path_source_denguetracker_data, # root file for data,
-#     states = brazil_ufs[i],
-#     start = ew_start,
-#     end = ew_end,
-#     last_n = 8
-#   )
-# }
-#
+baseline_list <- list()
+for (i in 1:length(brazil_ufs)) {
+   baseline_list[[i]] <- get_baseline_data(
+     root_dir = path_source_denguetracker_data, # root file for data,
+     states = brazil_ufs[i],
+     start = ew_start,
+     end = ew_end,
+     last_n = 10,
+     time_unit = "week"
+   )
+ }
+
 # save(baseline_list, file = file.path(path_proj, "data", "results", "baseline_list.RData"))
-load(file.path(path_proj, "data", "results", "baseline_list.RData"))
+#load(file.path(path_proj, "data", "results", "baseline_list.RData"))
 
 ```
 
 ```{r}
 # wrong name, change name
-ARABMwGT_result_out <- map(
+ç <- map(
   ARABMwGT_result_out,
   ~ rename(.x,
     ARABMwGT       = ARABM,
@@ -197,7 +201,42 @@ for (i in 1:length(brazil_ufs)) {
   result_out_list[[i]] <- result_out_list[[i]] %>%
     filter(!is.na(ARABM))
 }
-result_out_list[[1]]
+
+
+
+```
+
+```{r}
+print(result_out_list[[12]])
+read.csv(file.path(path_source_denguetracker_GT,202425, paste0("MG","_trends.csv")), 
+               stringsAsFactors = FALSE, skip = 2)[,c(1:3)] %>%
+        setNames(c("date", "dengue", "sintomas_dengue")) %>%
+        filter(date <= "2024-06-16" & date >= "2024-01-01") %>%
+        mutate(
+          across(
+            .cols = -date,
+            .fns = ~ as.numeric(ifelse(. == "<1", "0.5", .))
+          )
+        ) %>% 
+        select("dengue", "sintomas_dengue") %>%
+        as.matrix()
+```
+
+
+```{r}
+print(result_out_list[[18]])
+read.csv(file.path(path_source_denguetracker_GT,202425, paste0("RJ","_trends.csv")), 
+               stringsAsFactors = FALSE, skip = 2)[,c(1:3)] %>%
+        setNames(c("date", "dengue", "sintomas_dengue")) %>%
+        filter(date <= "2024-06-16" & date >= "2024-04-09") %>%
+        mutate(
+          across(
+            .cols = -date,
+            .fns = ~ as.numeric(ifelse(. == "<1", "0.5", .))
+          )
+        ) %>% 
+        select("dengue", "sintomas_dengue") %>%
+        as.matrix()
 ```
 
 
