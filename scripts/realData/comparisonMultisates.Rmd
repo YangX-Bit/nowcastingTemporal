@@ -123,7 +123,6 @@ time_end_ARABMwGT <- Sys.time()
 
 time_end_ARABMwGT - time_start_ARABMwGT
 
-
 ```
 
 ```{r}
@@ -155,8 +154,8 @@ for (i in 1:length(brazil_ufs)) {
  }
 
 # save(baseline_list, file = file.path(path_proj, "data", "results", "baseline_list.RData"))
-#load(file.path(path_proj, "data", "results", "baseline_list.RData"))
-
+load(file.path(path_proj, "data", "results", "baseline_list.RData"))
+baseline_list
 ```
 
 ```{r}

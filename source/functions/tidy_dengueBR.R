@@ -49,7 +49,8 @@ get_infodengue_data <- function(
     states,
     D = 0,
     week_start = "Sunday",
-    fill_missing = TRUE
+    fill_missing = TRUE,
+    if_last_D_cols_NA = TRUE
 ) {
   # Validate function inputs
   validate_inputs <- function() {
@@ -167,11 +168,13 @@ get_infodengue_data <- function(
     }
     
     # Set last X rows of delayX columns to NA
-    for (X in seq_len(D)) {
-      start_index <- max(1, N - X + 1)
-      M[start_index:N, X + 1] <- NA
+    if(if_last_D_cols_NA){
+      for (X in seq_len(D)) {
+        start_index <- max(1, N - X + 1)
+        M[start_index:N, X + 1] <- NA
+      }
     }
-    
+
     rownames(M) <- format(all_dates, "%Y-%m-%d")
     colnames(M) <- paste0("delay", 0:D)
     result_list[[st]] <- M
