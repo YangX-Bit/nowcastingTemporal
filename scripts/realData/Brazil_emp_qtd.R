@@ -7,6 +7,7 @@ brazil_ufs <- c(
   "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI",
   "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"
 )
+
 D <- 30
 # 3. Loop over each UF, retrieve & standardize the matrix, pivot to long, and bind
 all_dfs <- map_dfr(brazil_ufs, function(uf) {
@@ -14,7 +15,7 @@ all_dfs <- map_dfr(brazil_ufs, function(uf) {
   temp_mat <- get_infodengue_data(
     path_source_denguetracker_infodengue,
     "2024-03-03", "2024-12-29",
-    uf, D = 51, if_last_D_cols_NA = FALSE
+    uf, D = 65, if_last_D_cols_NA = FALSE
   )[[1]]
   used_mat <- temp_mat[ , c(0:D+1)]
   used_mat_std <- temp_mat[,ncol(temp_mat)]
@@ -36,18 +37,44 @@ all_dfs <- map_dfr(brazil_ufs, function(uf) {
 })
 
 
-# 4a. Plot SP as a standalone panel
+# 1) For each week, each time, the week reach 95%
+daily_q95 <- all_dfs %>%
+  group_by(UF, Time) %>%
+  summarise(
+    week95 = {
+      valid_idx <- !is.na(Value) & Value >= 0.95
+      if (any(valid_idx)) {
+        min(Delay[valid_idx], na.rm = TRUE)
+      } else {
+        NA_real_
+      }
+    },
+    .groups = "drop"
+  )
+
+# 2) Average
+state_summary <- daily_q95 %>%
+  group_by(UF) %>%
+  summarise(
+    mean_week95   = mean(week95, na.rm = TRUE),
+    median_week95 = median(week95, na.rm = TRUE),
+    n_obs         = sum(!is.na(week95)),     
+    .groups       = "drop"
+  )
+  
+
+
+# 4a. Plot SP as a standalone panel using its average week95
+sp_avg <- state_summary %>% filter(UF == "SP") %>% pull(mean_week95)
+
 sp_df <- filter(all_dfs, UF == "SP")
 p_sp <- ggplot(sp_df, aes(x = Delay, y = Value, group = Time)) +
   geom_line(color = "grey40", linewidth = 0.4, alpha = 0.5) +
-  geom_vline(xintercept = 15, color = "red", linewidth = 0.8) +
-  geom_vline(xintercept = 20, color = "red", linewidth = 0.6) +
-  geom_vline(xintercept = 25, color = "red", linewidth = 0.6) +
+  geom_vline(xintercept = sp_avg, color = "red", linewidth = 0.8) +
   geom_hline(yintercept = 0.95, color = "red", linewidth = 0.6) +
-  geom_hline(yintercept = 0.90, color = "red", linewidth = 0.6) +
   labs(
     title    = "São Paulo (SP): Normalized Delay Distributions",
-    subtitle = "Red line at 15,20,25-week delay (D = 15,20,25)",
+    subtitle = paste0("Average 95% quantile delay: ", round(sp_avg, 1), " weeks"),
     x        = "Delay (weeks)",
     y        = "Standardized Reporting Proportion"
   ) +
@@ -62,19 +89,37 @@ p_sp <- ggplot(sp_df, aes(x = Delay, y = Value, group = Time)) +
 
 print(p_sp)
 
-# 4b. Plot the remaining 25 states in a 5x5 grid
-others_df <- filter(all_dfs, UF != "SP")
+# 4b. Plot the remaining 25 states in a 5x5 grid, each with its own average week95 line
+others_df <- filter(all_dfs, !UF %in% c("SP", "ES"))
+# Plot with annotated red line labels
 p_others <- ggplot(others_df, aes(x = Delay, y = Value, group = Time)) +
   geom_line(color = "grey40", linewidth = 0.3, alpha = 0.4) +
-  geom_vline(xintercept = 15, color = "red", linewidth = 0.6) +
-  geom_vline(xintercept = 20, color = "red", linewidth = 0.6) +
-  geom_vline(xintercept = 25, color = "red", linewidth = 0.6) +
+  # Vertical lines for each state's mean_week95
+  geom_vline(
+    data = state_summary %>% filter(!UF %in% c("SP", "ES")),
+    aes(xintercept = mean_week95),
+    color = "red", linewidth = 0.6,
+    inherit.aes = FALSE
+  ) +
+  # Annotate each red line with its numeric value
+  geom_text(
+    data = state_summary %>% filter(!UF %in% c("SP", "ES")),
+    aes(
+      x     = mean_week95+2,
+      y     = 0.02,                   # slightly above the maximum of Value (assuming max ≤ 1)
+      label = round(mean_week95, 1)
+    ),
+    color    = "red",
+    size     = 3,
+    fontface = "bold",
+    inherit.aes = FALSE,
+    vjust    = 0
+  ) +
   geom_hline(yintercept = 0.95, color = "red", linewidth = 0.6) +
-  geom_hline(yintercept = 0.90, color = "red", linewidth = 0.6) +
   facet_wrap(~ UF, ncol = 5) +
   labs(
-    title    = "Brazilian States (excluding SP): Normalized Delay Distributions",
-    subtitle = "Each panel shows one state; red line at 15,20,25-week delay",
+    title    = "Brazilian States (excluding SP, ES): Normalized Delay Distributions",
+    subtitle = "Red vertical line: state-specific average 95% quantile delay",
     x        = "Delay (weeks)",
     y        = "Standardized Reporting Proportion"
   ) +
@@ -88,7 +133,9 @@ p_others <- ggplot(others_df, aes(x = Delay, y = Value, group = Time)) +
     panel.grid    = element_line(color = "grey90", linewidth = 0.2)
   )
 
+
 print(p_others)
+
 
 # After creating your ggplot (e.g. p_sp or p_others), save it like this:
 
