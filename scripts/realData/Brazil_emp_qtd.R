@@ -58,6 +58,7 @@ state_summary <- daily_q95 %>%
   summarise(
     mean_week95   = mean(week95, na.rm = TRUE),
     median_week95 = median(week95, na.rm = TRUE),
+    max_week95 = max(week95, na.rm = TRUE),
     n_obs         = sum(!is.na(week95)),     
     .groups       = "drop"
   )
@@ -161,3 +162,75 @@ ggsave(
   dpi      = 300
 )
 
+
+################ final
+
+p_all_final <- ggplot(all_dfs, aes(x = Delay, y = Value, group = Time)) +
+  geom_line(color = "grey40", linewidth = 0.3, alpha = 0.4) +
+  # Vertical lines for each state's mean_week95
+  geom_vline(
+    data = state_summary %>% filter(!UF %in% c("ES")),
+    aes(xintercept = mean_week95),
+    color = "red", linewidth = 0.6,
+    inherit.aes = FALSE
+  ) +
+  # Annotate each red line with its numeric value
+  geom_text(
+    data = state_summary %>% filter(!UF %in% c("ES")),
+    aes(
+      x     = mean_week95-2,
+      y     = 0.02,                   # slightly above the maximum of Value (assuming max ≤ 1)
+      label = round(mean_week95, 1)
+    ),
+    color    = "red",
+    size     = 3,
+    fontface = "bold",
+    inherit.aes = FALSE,
+    vjust    = 0
+  ) +
+  geom_vline(
+    data = state_summary %>% filter(!UF %in% c("ES")),
+    aes(xintercept = max_week95),
+    color = "steelblue", linewidth = 0.6,
+    inherit.aes = FALSE
+  ) +
+  geom_text(
+    data = state_summary %>% filter(!UF %in% c("ES")),
+    aes(
+      x     = max_week95+2,
+      y     = 0.02,                   # slightly above the maximum of Value (assuming max ≤ 1)
+      label = round(max_week95, 1)
+    ),
+    color    = "steelblue",
+    size     = 3,
+    fontface = "bold",
+    inherit.aes = FALSE,
+    vjust    = 0
+  ) +
+  geom_hline(yintercept = 0.95, color = "red", linewidth = 0.6) +
+  facet_wrap(~ UF, ncol = 4) +
+  labs(
+    title    = "Brazilian States (exclude ES): Normalized Delay Distributions",
+    subtitle = "Red (blue) vertical line: state-specific average (most recent) 95 % quantile delay",
+    x        = "Delay (weeks)",
+    y        = "Standardized Reporting Proportion"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    plot.title    = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    axis.title    = element_text(face = "bold"),
+    axis.text     = element_text(color = "black"),
+    strip.text    = element_text(face = "bold"),
+    panel.grid    = element_line(color = "grey90", linewidth = 0.2)
+  )
+
+ggsave(
+  filename = "Brazil_states_delay_D30.png",
+  plot     = p_all_final,
+  device   = "png",
+  width    = 10,
+  height   = 12,
+  units    = "in",
+  dpi      = 300
+)
