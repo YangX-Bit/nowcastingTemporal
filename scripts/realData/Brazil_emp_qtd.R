@@ -1,6 +1,11 @@
 # 1. Load required packages
 library(tidyverse)
 
+source("source/functions/tidy_dengueBR.R")
+path_proj = here::here()
+path_source_denguetracker_infodengue <- file.path(dirname(path_proj), "dengue-tracker/data/weekly_data/infodengue")
+
+
 # 2. Define the list of federative units
 brazil_ufs <- c(
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "GO",
@@ -15,7 +20,7 @@ all_dfs <- map_dfr(brazil_ufs, function(uf) {
   temp_mat <- get_infodengue_data(
     path_source_denguetracker_infodengue,
     "2024-03-03", "2024-12-29",
-    uf, D = 65, if_last_D_cols_NA = FALSE
+    uf, D = 61, if_last_D_cols_NA = FALSE
   )[[1]]
   used_mat <- temp_mat[ , c(0:D+1)]
   used_mat_std <- temp_mat[,ncol(temp_mat)]
@@ -62,8 +67,6 @@ state_summary <- daily_q95 %>%
     n_obs         = sum(!is.na(week95)),     
     .groups       = "drop"
   )
-  
-
 
 # 4a. Plot SP as a standalone panel using its average week95
 sp_avg <- state_summary %>% filter(UF == "SP") %>% pull(mean_week95)
@@ -188,30 +191,30 @@ p_all_final <- ggplot(all_dfs, aes(x = Delay, y = Value, group = Time)) +
     inherit.aes = FALSE,
     vjust    = 0
   ) +
-  geom_vline(
-    data = state_summary %>% filter(!UF %in% c("ES")),
-    aes(xintercept = max_week95),
-    color = "steelblue", linewidth = 0.6,
-    inherit.aes = FALSE
-  ) +
-  geom_text(
-    data = state_summary %>% filter(!UF %in% c("ES")),
-    aes(
-      x     = max_week95+2,
-      y     = 0.02,                   # slightly above the maximum of Value (assuming max ≤ 1)
-      label = round(max_week95, 1)
-    ),
-    color    = "steelblue",
-    size     = 3,
-    fontface = "bold",
-    inherit.aes = FALSE,
-    vjust    = 0
-  ) +
+  # geom_vline(
+  #   data = state_summary %>% filter(!UF %in% c("ES")),
+  #   aes(xintercept = max_week95),
+  #   color = "steelblue", linewidth = 0.6,
+  #   inherit.aes = FALSE
+  # ) +
+  # geom_text(
+  #   data = state_summary %>% filter(!UF %in% c("ES")),
+  #   aes(
+  #     x     = max_week95+2,
+  #     y     = 0.02,                   # slightly above the maximum of Value (assuming max ≤ 1)
+  #     label = round(max_week95, 1)
+  #   ),
+  #   color    = "steelblue",
+  #   size     = 3,
+  #   fontface = "bold",
+  #   inherit.aes = FALSE,
+  #   vjust    = 0
+  # ) +
   geom_hline(yintercept = 0.95, color = "red", linewidth = 0.6) +
   facet_wrap(~ UF, ncol = 4) +
   labs(
-    title    = "Brazilian States (exclude ES): Normalized Delay Distributions",
-    subtitle = "Red (blue) vertical line: state-specific average (most recent) 95 % quantile delay",
+    title    = NULL,
+    subtitle = NULL,
     x        = "Delay (weeks)",
     y        = "Standardized Reporting Proportion"
   ) +
