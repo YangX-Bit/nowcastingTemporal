@@ -23,12 +23,14 @@ source(file.path(path_source_nowcasting, "simulation", "simulations_functions_fi
 source(file.path(path_source_nowcasting, "functions", "prior_function.R"))
 posterior_draws_path = file.path(path_source_nowcasting, "data", "draws", "testEach")
 
-
 ```
 
 ```{r}
 b_ou <-  file.path(path_source_nowcasting, "models", "b-ou.stan")
 model <- cmdstan_model(b_ou)
+
+#file.path(dirname(dirname(path_proj)),"cmdstan-2.32.0")
+#set_cmdstan_path(file.path(dirname(dirname(path_proj)),"cmdstan-2.32.0"))
 
 b_ou_lambda <- file.path(path_proj, "source", "models", "b-ou-GT-combined-seasonality.stan")
 # b_ou_lambda <- file.path(path_proj, "source", "models", "b-ou-GT-time-varying-betas.stan")
