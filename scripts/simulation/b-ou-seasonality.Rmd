@@ -23,6 +23,7 @@ source(file.path(path_source_nowcasting, "simulation", "simulations_functions_fi
 source(file.path(path_source_nowcasting, "functions", "prior_function.R"))
 posterior_draws_path = file.path(path_source_nowcasting, "data", "draws", "testEach")
 
+source(file.path(path_proj, "source", "functions", "simulation_functions.R"))
 ```
 
 ```{r}
@@ -32,98 +33,109 @@ model <- cmdstan_model(b_ou)
 #file.path(dirname(dirname(path_proj)),"cmdstan-2.32.0")
 #set_cmdstan_path(file.path(dirname(dirname(path_proj)),"cmdstan-2.32.0"))
 
-b_ou_lambda <- file.path(path_proj, "source", "models", "b-ou-GT-combined-seasonality.stan")
+b_ou_lambda <-  file.path(path_proj, "source", "models", "b-ou-GT-combined-seasonality-fourier.stan")
 # b_ou_lambda <- file.path(path_proj, "source", "models", "b-ou-GT-time-varying-betas.stan")
 model_GT <- cmdstan_model(b_ou_lambda)
 ```
 # GT
 ```{r}
-# Helper function: scale a vector to [new_min, new_max]
-scale_to_range <- function(x, new_min, new_max) {
-  (x - min(x)) / (max(x) - min(x)) * (new_max - new_min) + new_min
+# -----------------------------------------------------------------------------
+# smoother simulation with AR(1) disturbance & tunable x/s noise
+# -----------------------------------------------------------------------------
+
+set.seed(123)
+years        <- 3
+weeks_per_yr <- 52
+T_len        <- years * weeks_per_yr
+t            <- seq_len(T_len)
+week         <- ((t - 1) %% weeks_per_yr) + 1
+
+# exposure
+E <- rep(10000, T_len)
+
+# seasonal via Fourier
+P     <- weeks_per_yr
+H     <- 2
+alpha <- rnorm(H, 0, 2)
+gamma <- rnorm(H, 0, 2)
+s_t_unstd <- numeric(T_len)
+for (tt in 1:T_len) {
+  angle <- 2 * pi * (week[tt] - 1) / P
+  season <- 0
+  for (h in 1:H) {
+    season <- season +
+      alpha[h] * cos(h * angle) +
+      gamma[h] * sin(h * angle)
+  }
+  s_t_unstd[tt] <- season
 }
+s_t <- (s_t_unstd - mean(s_t_unstd)) / sd(s_t_unstd)
 
-# 1. Basic settings
-set.seed(3)
-years         <- 3
-weeks_per_yr  <- 52
-T_len         <- years * weeks_per_yr
-t             <- seq_len(T_len)
-week          <- ((t - 1) %% weeks_per_yr) + 1
+# covariate x_t
+x_t <- rnorm(T_len)
+x_t <- (x_t - mean(x_t)) / sd(x_t)
 
-# 2. Simulate seasonal effect s_true via cyclic second-order random walk
-P             <- weeks_per_yr
-sigma_s_true  <- 1.0    # innovation SD for the RW
-s_true        <- numeric(P)
-# initialize first two points
-s_true[1]     <- rnorm(1, 0, sigma_s_true)
-s_true[2]     <- rnorm(1, 0, sigma_s_true)
-# cyclic second-order RW over weeks
-for (p in 3:P) {
-  s_true[p] <- rnorm(1,
-                     mean = 2 * s_true[p-1] - s_true[p-2],
-                     sd   = sigma_s_true)
+# AR(1) disturbance ε_t
+rho_eps   <- 0.8
+sigma_eps <- 0.5     
+epsilon   <- numeric(T_len)
+epsilon[1] <- rnorm(1, 0, sigma_eps)
+for (tt in 2:T_len) {
+  epsilon[tt] <- rho_eps * epsilon[tt-1] +
+    rnorm(1, 0, sigma_eps * sqrt(1 - rho_eps^2))
 }
-# enforce cyclic boundary conditions
-s_true[1] <- rnorm(1, 2 * s_true[P] - s_true[P-1], sigma_s_true)
-s_true[2] <- rnorm(1, 2 * s_true[1] - s_true[P],     sigma_s_true)
+var_eps_emp <- var(epsilon)
 
-# 3. Map seasonal effect onto a controlled interval for scaling
-new_min_s <- -2    # choose as needed
-new_max_s <-  2
-s_true_scaled <- scale_to_range(s_true, new_min_s, new_max_s)
-
-# 4. Assign seasonal effect to each time point
-s_t <- s_true_scaled[week]
-
-# 5. Simulate outbreak component (two Gaussian peaks)
-outbreak_amp  <- 40
-peak1         <- 15                  # first-year peak at week 15
-peak3         <- peak1 + 2*weeks_per_yr
-outbreak      <- outbreak_amp * (
-  exp(-((t - peak1)^2)  / (2 * 2^2)) +
-    exp(-((t - peak3)^2) / (2 * 2^2))
+# scenarios
+scenario_list <- list(
+  list(name = "moderate noise", tau_x = 1, tau_s = 1),
+  list(name = "season dominant", tau_x = 1, tau_s = 3)
 )
 
-# 6. Build covariate X1 = outbreak + heteroscedastic noise
-alpha_noise   <- 2
-beta_noise    <- 0.05
-noise_sd      <- alpha_noise + beta_noise * outbreak
-cov_raw       <- outbreak + rnorm(T_len, 0, noise_sd)
-X1            <- round(pmin(100, pmax(0, cov_raw)))  # truncate to [0,100]
-ZT            <- (X1 - mean(X1)) / sd(X1)            # standardize for Stan
+beta0 <- -5  # logit intercept
 
-# 7. Simulate independent β_t ~ Normal(0, sigma_beta_true)
-sigma_beta_true <- 0.005
-beta_t_true     <- rnorm(T_len, 0, sigma_beta_true)
-
-# 8. Simulate AR(1) residual η_t
-rho_eta_true    <- 0.8
-sigma_eta_true  <- 0.5
-eta             <- numeric(T_len)
-eta[1]          <- rnorm(1, 0, sigma_eta_true)
-for (i in 2:T_len) {
-  eta[i] <- rnorm(1, rho_eta_true * eta[i-1], sigma_eta_true)
+results <- list()
+for (sc in scenario_list) {
+  tau_x <- sc$tau_x
+  tau_s <- sc$tau_s
+  # separate scales
+  c_x <- sqrt(tau_x * var_eps_emp)
+  c_s <- sqrt(tau_s * var_eps_emp)
+  x_scaled <- c_x * x_t
+  s_scaled <- c_s * s_t
+  
+  # build linear predictor / link
+  log_lambda <- beta0 + x_scaled + s_scaled + epsilon
+  lambda_t     <- exp(log_lambda)
+  
+  # simulate counts
+  mu_t    <- E * lambda_t
+  N_final <- rpois(T_len, mu_t)
+  
+  results[[sc$name]] <- list(
+    x_scaled = x_scaled,
+    s_scaled = s_scaled,
+    epsilon  = epsilon,
+    lambda_t = lambda_t,
+    N_final  = N_final
+  )
+  
+  par(mfrow = c(4, 1), mar = c(4, 4, 2, 1))
+  plot(t, x_scaled, type = "l",
+       main = paste("Scenario:", sc$name, "- x_scaled"),
+       ylab = expression(x[t]), xlab = "Time")
+  plot(t, s_scaled, type = "l",
+       main = paste("Scenario:", sc$name, "- s_scaled"),
+       ylab = expression(s[t]), xlab = "Time")
+  plot(t, log_lambda, type = "l",
+       main = paste("Scenario:", sc$name, "- log(lambda)"),
+       ylab = expression(log(lambda[t])), xlab = "Time")
+  plot(t, N_final, type = "h",
+       main = paste("Scenario:", sc$name, "- N_final"),
+       ylab = "Count", xlab = "Time")
 }
 
-# 9. Construct log-lambda and draw counts N_t
-beta0_true    <- 2.5               # manually set intercept for scale
-log_lambda    <- beta0_true + beta_t_true * ZT + eta + s_t
-lambda        <- exp(log_lambda)
-N             <- rpois(T_len, lambda)
-
-# 10. Build Y matrix (no delays: only first column)
-D             <- 5
-Y             <- matrix(0L, nrow = T_len, ncol = D + 1)
-Y[, 1]        <- N
-
-# 11. Quick plots to verify
-par(mfrow = c(4,1), mar = c(4,4,2,1))
-plot(t, X1,          type = 'l', main = 'Covariate X1',     ylab = 'X1',         xlab = 'Time')
-plot(t, s_t,         type = 'l', main = 'Seasonal s_t',     ylab = 's_t',        xlab = 'Time')
-plot(t, beta_t_true, type = 'l', main = expression(beta[t]), ylab = expression(beta[t]), xlab = 'Time')
-plot(t, lambda,      type = 'l', main = expression(lambda[t]), ylab = expression(lambda[t]), xlab = 'Time')
-
+lambda <- results[[1]]$N_final 
 ```
 
 ## Fully reported scenario
@@ -137,11 +149,10 @@ plot(t, lambda,      type = 'l', main = expression(lambda[t]), ylab = expression
 # alpha_lamb =  c( rep(10,5), alpha_increase_seq_1 + rnorm(alpha_increase_seq_1,10,10),
 #                  alpha_decrease_seq_1 + rnorm(alpha_decrease_seq_1,10,10),
 #                  rep(10,5))
-alpha_lamb = lambda
-beta_lamb = 0.5
+
 # Time_len = 60
 #D <- 15;
-D <- 10
+D <- 15
 ```
 
 ### Simulation
@@ -149,8 +160,7 @@ D <- 10
 ```{r}
 params_b_ou_FR <- list(
   data = list(
-    alpha_lamb = alpha_lamb,
-    beta_lamb  = beta_lamb,
+    lambda = lambda,
     T       = T_len,
     date_start = as.Date("2024-01-01"),
     D = D
@@ -169,9 +179,10 @@ plot(b_ou_FR$phi, pch = 19, type = "b")
 par(mfrow = c(1, 1))
 matplot(t(b_ou_FR$q), type = "l", lty = 1, ylim = c(0, 1))
 
-cor(X1, b_ou_FR$case_true)
+cor(results[[1]]$x_scaled, b_ou_FR$case_true)
 
-b_ou_FR$case_true = b_ou_FR$case_true+1
+b_ou_FR$lambda - lambda
+#b_ou_FR$case_true = b_ou_FR$case_true+1
 ```
 
 ```{r}
@@ -182,7 +193,8 @@ withGT <- list()
 ### Model fitting
 
 ```{r}
-ind = seq(20, 156, by = 20)
+#ind = seq(20, 156, by = 20)
+ind = 52
 varnames <- list()
 vanilla <- list()
 test <- list()
@@ -201,8 +213,6 @@ for (i in 1:length(ind)) {
   vanilla[[i]] <- test[[i]]$summary(variables = "N")$mean
 }
 
-
-
 ```
 
 ```{r}
@@ -215,7 +225,7 @@ for (i in 1:length(ind)) {
   w = rep(1:P,3)[1:ind[i]]
   stan_data_GT <- c(list(T = ind[i], D = D, Y = b_ou_FR$case_reported_cumulated[1:ind[i], ]), hypers, 
                list(K = ncol(matrix(ZT)), X = as.matrix(matrix(ZT)[1:ind[i], 1]),
-                    P = 52, w=w))
+                    P = 52, w=w, E = rep(10000,156), H = 2))
 test_GT[[i]] = model_GT$sample(
     data = stan_data_GT,
     iter_sampling = 3000,
