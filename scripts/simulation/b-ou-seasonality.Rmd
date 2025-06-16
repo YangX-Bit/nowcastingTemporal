@@ -152,7 +152,6 @@ s_t <- scale(                          # zero-mean, unit-sd
   }, numeric(1))
 )[, 1]
 
-
 # --- (2) covariate X_t -------------------------------------------------------
 x_t <- scale(rnorm(T_len))[, 1]        # standard normal, independent of ε
 
@@ -160,20 +159,19 @@ x_t <- scale(rnorm(T_len))[, 1]        # standard normal, independent of ε
 # rho_eps <- 0.8; sigma_eps <- 0.5
 # epsilon <- arima.sim(model = list(ar = rho_eps), n = T_len,
 #                      sd = sigma_eps * sqrt(1 - rho_eps^2))
-sigma_eps <- 0.2
-epsilon <- rnorm(T_len, 0, sigma_eps)
-var_eps_emp <- var(epsilon)
+sigma_eps  <- 0.2
+epsilon    <- rnorm(T_len, mean = 0, sd = sigma_eps)
+sd_eps_emp <- sd(epsilon)
 
 # --- (4) use tau to control the variance --------------------------------------------------
-tau_x <- 5      # information level for x
-tau_s <- 3      # for s
+tau_x <- 3      # information level for x
+tau_s <- 5      # for s
 
-c_s <- sqrt(tau_s * var_eps_emp)
-s_scaled <- c_s * s_t
+sd_s      <- sd_eps_emp * sqrt(tau_s)
+s_scaled  <- sd_s * s_t
 
-# --- (5) choose prior for β (control the var of x part) --------------------------------------------------
-sigma_beta <- sqrt(tau_x * var_eps_emp)
-beta1 <- rnorm(T_len, 0.5, sigma_beta)       # β₁ ~ N(0, σ²_beta)
+sd_beta   <- sd_eps_emp * sqrt(tau_x)
+beta1     <- rnorm(T_len, mean = 0.5, sd = sd_beta)
 
 beta0 <- -5
 
@@ -186,16 +184,16 @@ N     <- rpois(T_len, mu_t)
 
 par(mfrow = c(4, 1), mar = c(4, 4, 2, 1))
 plot(t, beta1 *x_t, type = "l",
-       main = paste("Scenario:", sc$name, "- x_scaled"),
+       #main = paste("Scenario:", sc$name, "- x_scaled"),
        ylab = expression(x[t]), xlab = "Time")
 plot(t, s_scaled, type = "l",
-       main = paste("Scenario:", sc$name, "- s_scaled"),
+       #main = paste("Scenario:", sc$name, "- s_scaled"),
        ylab = expression(s[t]), xlab = "Time")
 plot(t, log_lambda, type = "l",
-       main = paste("Scenario:", sc$name, "- log(lambda)"),
+       #main = paste("Scenario:", sc$name, "- log(lambda)"),
        ylab = expression(log(lambda[t])), xlab = "Time")
-plot(t, N_final, type = "h",
-       main = paste("Scenario:", sc$name, "- N_final"),
+plot(t, N, type = "h",
+       #main = paste("Scenario:", sc$name, "- N_final"),
        ylab = "Count", xlab = "Time")
 ```
 
