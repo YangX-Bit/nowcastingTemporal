@@ -136,14 +136,14 @@ lambda <- results[[1]]$N_final
 
 ```{r}
 # --- preliminaries unchanged -------------------------------------------------
-set.seed(123)
+set.seed(111)
 years <- 3; weeks_per_yr <- 52; T_len <- years * weeks_per_yr
 t     <- seq_len(T_len)
 week  <- ((t - 1) %% weeks_per_yr) + 1
 E     <- rep(10000, T_len)
 
 # --- (1) seasonality ---------------------------------------------------------
-P <- weeks_per_yr; H <- 2
+P <- weeks_per_yr; H <- 1
 alpha <- rnorm(H, 0, 2); gamma <- rnorm(H, 0, 2)
 s_t <- scale(                          # zero-mean, unit-sd
   vapply(t, function(tt) {
@@ -152,6 +152,7 @@ s_t <- scale(                          # zero-mean, unit-sd
   }, numeric(1))
 )[, 1]
 
+
 # --- (2) covariate X_t -------------------------------------------------------
 x_t <- scale(rnorm(T_len))[, 1]        # standard normal, independent of ε
 
@@ -159,7 +160,7 @@ x_t <- scale(rnorm(T_len))[, 1]        # standard normal, independent of ε
 # rho_eps <- 0.8; sigma_eps <- 0.5
 # epsilon <- arima.sim(model = list(ar = rho_eps), n = T_len,
 #                      sd = sigma_eps * sqrt(1 - rho_eps^2))
-sigma_eps <- 0.5
+sigma_eps <- 0.2
 epsilon <- rnorm(T_len, 0, sigma_eps)
 var_eps_emp <- var(epsilon)
 
@@ -172,19 +173,30 @@ s_scaled <- c_s * s_t
 
 # --- (5) choose prior for β (control the var of x part) --------------------------------------------------
 sigma_beta <- sqrt(tau_x * var_eps_emp)
-beta1 <- rnorm(T_len, 3, sigma_beta)       # β₁ ~ N(0, σ²_beta)
+beta1 <- rnorm(T_len, 0.5, sigma_beta)       # β₁ ~ N(0, σ²_beta)
 
-beta0 <- -13
+beta0 <- -5
 
-#log_lambda <- beta0 + beta1 * x_t + s_scaled + epsilon
-log_lambda <- beta0 + beta1 *x_t + epsilon
+log_lambda <- beta0 + beta1 * x_t + s_scaled + epsilon
+#log_lambda <- beta0 + beta1 *x_t + epsilon
 lambda_t   <- exp(log_lambda)
 
 mu_t  <- E * lambda_t
 N     <- rpois(T_len, mu_t)
 
-plot(N, type = "l")
-
+par(mfrow = c(4, 1), mar = c(4, 4, 2, 1))
+plot(t, beta1 *x_t, type = "l",
+       main = paste("Scenario:", sc$name, "- x_scaled"),
+       ylab = expression(x[t]), xlab = "Time")
+plot(t, s_scaled, type = "l",
+       main = paste("Scenario:", sc$name, "- s_scaled"),
+       ylab = expression(s[t]), xlab = "Time")
+plot(t, log_lambda, type = "l",
+       main = paste("Scenario:", sc$name, "- log(lambda)"),
+       ylab = expression(log(lambda[t])), xlab = "Time")
+plot(t, N_final, type = "h",
+       main = paste("Scenario:", sc$name, "- N_final"),
+       ylab = "Count", xlab = "Time")
 ```
 
 
@@ -459,12 +471,12 @@ param_true = tibble(
 mcmc_areas(test_GT[[test_num]]$draws(grep("^q\\[10,.+\\]$", varnames_GT[[test_num]], value = TRUE)), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
-param_true = tibble(
-    parameter = grep("^N\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
-    x = b_ou_FR$case_true[1:ind[test_num], 1]
-)
-mcmc_areas(test_GT[[test_num]]$draws("N"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
+#param_true = tibble(
+#    parameter = grep("^N\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
+#    x = b_ou_FR$case_true[1:ind[test_num], 1]
+#)
+#mcmc_areas(test_GT[[test_num]]$draws("N"), prob_outer = 0.95) +
+#    geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
     parameter = grep("^beta_t\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
