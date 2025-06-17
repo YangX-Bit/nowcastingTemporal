@@ -99,7 +99,7 @@ model {
   gamma ~ normal(0,0.2);
   
   // noise
-  sigma_eta ~ normal(0,2);
+  sigma_eta ~ normal(0,0.2);
 
   // Ornstein-Uhlenbeck processes
   log_b[1] ~ normal(mu_log_b, sigma_log_b);

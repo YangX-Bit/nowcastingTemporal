@@ -52,22 +52,22 @@ E     <- rep(10000, T_len)
 x_t <- scale(rnorm(T_len))[, 1]        # standard normal, independent of ε
 
 # --- (2) noise ---------------------------------------------------
-# rho_eps <- 0.8; sigma_eps <- 0.5
-# epsilon <- arima.sim(model = list(ar = rho_eps), n = T_len,
-#                      sd = sigma_eps * sqrt(1 - rho_eps^2))
-sigma_eps  <- 0.2
-epsilon    <- rnorm(T_len, mean = 0, sd = sigma_eps)
-sd_eps_emp <- sd(epsilon)
+# rho_eta <- 0.8; sigma_eta <- 0.5
+# eta <- arima.sim(model = list(ar = rho_eta), n = T_len,
+#                      sd = sigma_eta * sqrt(1 - rho_eta^2))
+sigma_eta  <- 0.2
+eta    <- rnorm(T_len, mean = 0, sd = sigma_eta)
+sd_eta_emp <- sd(eta)
 
 # --- (3) use tau to control the variance --------------------------------------------------
 tau_x <- 3      # information level for x
 tau_s <- 2        # for s
 
 # x
-sd_s      <- sd_eps_emp * sqrt(tau_s)
+sd_s      <- sd_eta_emp * sqrt(tau_s)
 s_scaled  <- sd_s * s_t
 
-sd_beta   <- sd_eps_emp * sqrt(tau_x)
+sd_beta   <- sd_eta_emp * sqrt(tau_x)
 beta1     <- rnorm(T_len, mean = 0.5, sd = sd_beta)
 
 beta0 <- -5
@@ -75,7 +75,7 @@ beta0 <- -5
 # --- (4) seasonality ---------------------------------------------------------
 P <- weeks_per_yr; H <- 1
 # alpha <- rnorm(H, 0, 2); gamma <- rnorm(H, 0, 2)
-A <- sd_eps_emp * sqrt(2 * tau_s) # amplitude/sd
+A <- sd_eta_emp * sqrt(2 * tau_s) # amplitude/sd
 phi <- runif(1, 0, 2*pi)
 
 # alpha gamma
@@ -86,8 +86,8 @@ s_t <-vapply(t, function(tt) {
     sum(alpha * cos((1:H) * angle) + gamma * sin((1:H) * angle))
   }, numeric(1))
 
-log_lambda <- beta0 + beta1 * x_t + s_scaled + epsilon
-#log_lambda <- beta0 + beta1 *x_t + epsilon
+log_lambda <- beta0 + beta1 * x_t + s_scaled + eta
+#log_lambda <- beta0 + beta1 *x_t + eta
 lambda_t   <- exp(log_lambda)
 
 mu_t  <- E * lambda_t
