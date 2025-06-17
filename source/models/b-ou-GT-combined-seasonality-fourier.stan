@@ -13,6 +13,11 @@ data {
   // covariates x
   int<lower=1> K;                      
   matrix[T, K] x;    
+  
+  // seasonality
+  int<lower=1> P; // number of time‐units in one full seasonal cycle (e.g., weeks per year)
+  int<lower=1> H; //  number of harmonics (Fourier components) 
+  array[T] int<lower=1, upper=P> week; 
 }
 
 parameters {
@@ -34,6 +39,10 @@ parameters {
   // white noise
   vector[T] eta;                       
   real<lower=0> sigma_eta;  
+  
+  // seasonality
+  vector[H] alpha;
+  vector[H] gamma;
 }
 
 transformed parameters {
@@ -47,16 +56,26 @@ transformed parameters {
       log_q[t, d+1] = log( q[t, d+1] );
     }
   }
-
+  
+  vector[T] s;
   vector[T] log_lambda;
   vector[T] lambda;   
   for (t in 1:T) {
+    // seasonality
+    real angle = 2*pi() * (week[t] - 1) / P;
+    real sum_h = 0;
+    for( h in 1:H){
+      sum_h += alpha[h] * cos(h * angle)
+      + gamma[h] * sin(h * angle);
+    }
+    s[t] = sum_h;
+    // final lambda
     log_lambda[t] = beta_0
                   + dot_product(beta_t[, t], x[t])
+                  + s[t]
                   + eta[t];
     lambda[t] = exp(log_lambda[t]);
   }
-
 }
 
 model {
@@ -72,8 +91,15 @@ model {
   // Independent priors for β_{k,t}
   for (k in 1:K)
     for (t in 1:T)
-      beta_t[k, t] ~ normal(0, sigma_beta);
+      beta_t[k, t] ~ normal(0.5, sigma_beta);
   sigma_beta ~ normal(0, 0.2);
+  
+  // Seasonality
+  alpha ~ normal(0,0.2);
+  gamma ~ normal(0,0.2);
+  
+  // noise
+  sigma_eta ~ normal(0,2);
 
   // Ornstein-Uhlenbeck processes
   log_b[1] ~ normal(mu_log_b, sigma_log_b);
