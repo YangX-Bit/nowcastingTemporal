@@ -40,72 +40,77 @@ model_GT <- cmdstan_model(b_ou_lambda)
 # GT
 
 ```{r}
-# --- preliminaries unchanged -------------------------------------------------
-#set.seed(111)
-years <- 3; weeks_per_yr <- 52; T_len <- years * weeks_per_yr
-t     <- seq_len(T_len)
-week  <- ((t - 1) %% weeks_per_yr) + 1
-E     <- rep(10000, T_len)
+  # --- preliminaries unchanged -------------------------------------------------
+  #set.seed(111)
+  years <- 3; weeks_per_yr <- 52; T_len <- years * weeks_per_yr
+  t     <- seq_len(T_len)
+  week  <- ((t - 1) %% weeks_per_yr) + 1
+  E     <- rep(10000, T_len)
+  
+  
+  # --- (1) noise ---------------------------------------------------
+  # rho_eta <- 0.8; sigma_eta <- 0.5
+  # eta <- arima.sim(model = list(ar = rho_eta), n = T_len,
+  #                      sd = sigma_eta * sqrt(1 - rho_eta^2))
+  sigma_eta  <- 0.2
+  eta    <- rnorm(T_len, mean = 0, sd = sigma_eta)
+  sd_eta_emp <- sd(eta)
+  
+  # --- (2) covariate X_t -------------------------------------------------------
+  x_t <- scale(rnorm(T_len))[, 1]        # standard normal, independent of other components
+  
+  # --- (3) use tau to control the variance --------------------------------------------------
+  tau_x <- 3      # information level for x
+  tau_s <- 5        # for s
+  
+  # x
+  # sd_s      <- sd_eta_emp * sqrt(tau_s)
+  # s_scaled  <- sd_s * s_t
+  
+  sd_beta   <- sd_eta_emp * sqrt(tau_x)
+  beta1     <- rnorm(T_len, mean = 0.5, sd = sd_beta)
+  
+  beta0 <- -5
+  
+  # --- (4) seasonality ---------------------------------------------------------
+  # --- baisc setting ---------------------------------------------------
+  H_max <- 5            # harmonic
+  P     <- weeks_per_yr   # periodic
+  
+  # --- Fourier basis -------------------------------------------------
+  # to each h，we generate cos(h*angle) and sin(h*angle)
+  angle <- 2 * pi * (t - 1) / P  # for each t we have one angle
+  fourier_list <- lapply(1:H_max, function(h) {
+    cbind(
+      cos_h = cos(h * angle),
+      sin_h = sin(h * angle)
+    )
+  })
+  fourier_basis <- do.call(cbind, fourier_list)
+  # column name
+  colnames(fourier_basis) <- unlist(lapply(1:H_max, function(h) {
+    c(paste0("cos_h", h), paste0("sin_h", h))
+  }))
+  fourier_basis_scaled <- scale(fourier_basis, center = FALSE, scale = apply(fourier_basis, 2, sd))
+  
+  # --- coefficient beta_s for seasonality---------------------------------
+  # we hope Var(s_t) / Var(η) ≈ tau_s
+  # decide the sd for beta_s sd_eta_emp*sqrt(tau_s)
+  target_var  <- tau_s * 0.2^2
+  # because Var(X_scaled %*% beta) = sigma_beta^2 * (2H)
+  sigma_beta <- sqrt(target_var / (2*H_max))
+  
+  beta_s    <- rnorm(2 * H_max, mean = 0, sd = sigma_beta)
+  s_t <- as.vector(fourier_basis_scaled %*% beta_s)
 
-
-# --- (1) covariate X_t -------------------------------------------------------
-x_t <- scale(rnorm(T_len))[, 1]        # standard normal, independent of ε
-
-# --- (2) noise ---------------------------------------------------
-# rho_eta <- 0.8; sigma_eta <- 0.5
-# eta <- arima.sim(model = list(ar = rho_eta), n = T_len,
-#                      sd = sigma_eta * sqrt(1 - rho_eta^2))
-sigma_eta  <- 0.2
-eta    <- rnorm(T_len, mean = 0, sd = sigma_eta)
-sd_eta_emp <- sd(eta)
-
-# --- (3) use tau to control the variance --------------------------------------------------
-tau_x <- 3      # information level for x
-tau_s <- 2        # for s
-
-# x
-sd_s      <- sd_eta_emp * sqrt(tau_s)
-s_scaled  <- sd_s * s_t
-
-sd_beta   <- sd_eta_emp * sqrt(tau_x)
-beta1     <- rnorm(T_len, mean = 0.5, sd = sd_beta)
-
-beta0 <- -5
-
-# --- (4) seasonality ---------------------------------------------------------
-P <- weeks_per_yr; H <- 1
-# alpha <- rnorm(H, 0, 2); gamma <- rnorm(H, 0, 2)
-A <- sd_eta_emp * sqrt(2 * tau_s) # amplitude/sd
-phi <- runif(1, 0, 2*pi)
-
-# alpha gamma
-alpha <- A*cos(phi); gamma <- A*sin(phi)
-
-s_t <-vapply(t, function(tt) {
-    angle <- 2 * pi * (week[tt] - 1) / P
-    sum(alpha * cos((1:H) * angle) + gamma * sin((1:H) * angle))
-  }, numeric(1))
-
-log_lambda <- beta0 + beta1 * x_t + s_scaled + eta
-#log_lambda <- beta0 + beta1 *x_t + eta
-lambda_t   <- exp(log_lambda)
+  
+  log_lambda <- beta0 + beta1 * x_t + s_t + eta
+  #log_lambda <- beta0 + beta1 *x_t + eta
+  lambda_t   <- exp(log_lambda)
 
 mu_t  <- E * lambda_t
 N     <- rpois(T_len, mu_t)
-
-par(mfrow = c(4, 1), mar = c(4, 4, 2, 1))
-plot(t, beta1 *x_t, type = "l",
-       #main = paste("Scenario:", sc$name, "- x_scaled"),
-       ylab = expression(x[t]), xlab = "Time")
-plot(t, s_scaled, type = "l",
-       #main = paste("Scenario:", sc$name, "- s_scaled"),
-       ylab = expression(s[t]), xlab = "Time")
-plot(t, log_lambda, type = "l",
-       #main = paste("Scenario:", sc$name, "- log(lambda)"),
-       ylab = expression(log(lambda[t])), xlab = "Time")
-plot(t, N, type = "h",
-       #main = paste("Scenario:", sc$name, "- N_final"),
-       ylab = "Count", xlab = "Time")
+plot(N, type = "l")
 
 ```
 
@@ -155,6 +160,20 @@ matplot(t(b_ou_FR$q), type = "l", lty = 1, ylim = c(0, 1))
 cor(x_t, b_ou_FR$case_true)
 
 #b_ou_FR$case_true = b_ou_FR$case_true+1
+par(mfrow = c(4, 1), mar = c(4, 4, 2, 1))
+plot(t, beta1 *x_t, type = "l",
+       #main = paste("Scenario:", sc$name, "- x_scaled"),
+       ylab = expression(x[t]), xlab = "Time")
+plot(t, s_t, type = "l",
+       #main = paste("Scenario:", sc$name, "- s_scaled"),
+       ylab = expression(s[t]), xlab = "Time")
+plot(t, log_lambda, type = "l",
+       #main = paste("Scenario:", sc$name, "- log(lambda)"),
+       ylab = expression(log(lambda[t])), xlab = "Time")
+plot(t, b_ou_FR$case_true, type = "h",
+       #main = paste("Scenario:", sc$name, "- N_final"),
+       ylab = "Count", xlab = "Time")
+
 ```
 
 ```{r}
@@ -197,7 +216,7 @@ for (i in 1:length(ind)) {
   w = rep(1:P,3)[1:ind[i]]
   stan_data_GT <- c(list(T = ind[i], D = D, Y = b_ou_FR$case_reported_cumulated[1:ind[i], ]), hypers, 
                list(K = ncol(matrix(x_t)), x = as.matrix(matrix(x_t)[1:ind[i], 1]),
-                    P = weeks_per_yr, H = 1, week = head(rep(1:weeks_per_yr, years), ind[i])
+                    S = ncol(fourier_basis_scaled), bases_s = fourier_basis_scaled[(1:ind[i]),]
                     ))
 test_GT[[i]] = model_GT$sample(
     data = stan_data_GT,
@@ -353,8 +372,7 @@ mcmc_areas(test_GT[[test_num]]$draws("theta_logit_phi"), prob = 0.95, prob_outer
 mcmc_areas(test_GT[[test_num]]$draws("mu_log_b"), prob = 0.95, prob_outer = 0.95)
 mcmc_areas(test_GT[[test_num]]$draws("mu_logit_phi"), prob = 0.95, prob_outer = 0.95)
 
-mcmc_areas(test_GT[[test_num]]$draws("alpha"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_GT[[test_num]]$draws("gamma"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT[[test_num]]$draws("sigma_eta"), prob = 0.95, prob_outer = 0.95)
 
 param_true = tibble(
     parameter = grep("^b\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
@@ -392,17 +410,31 @@ mcmc_areas(test_GT[[test_num]]$draws("N"), prob_outer = 0.95) +
    geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^beta_t\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
+    parameter = grep("^beta_x\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
     x = beta1[1:ind[test_num]]
 )
-mcmc_areas(test_GT[[test_num]]$draws("beta_t"), prob_outer = 0.95) +
+mcmc_areas(test_GT[[test_num]]$draws("beta_x"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^s\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
+    parameter = grep("^season\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
     x = s_t[1:ind[test_num]]
 )
-mcmc_areas(test_GT[[test_num]]$draws("s"), prob_outer = 0.95) +
+mcmc_areas(test_GT[[test_num]]$draws("season"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^beta_s\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
+    x = beta_s
+)
+mcmc_areas(test_GT[[test_num]]$draws("beta_s"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^eta\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
+    x = eta[1:ind[test_num]]
+)
+mcmc_areas(test_GT[[test_num]]$draws("eta"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 ```
@@ -473,7 +505,7 @@ for (i in 1:length(ind)) {
   w = rep(1:P,3)[1:ind[i]]
   stan_data_GT_NFR <- c(list(T = ind[i], D = D, Y = b_ou_FR$case_reported_cumulated[1:ind[i], ]), hypers, 
                list(K = ncol(matrix(x_t)), x = as.matrix(matrix(x_t)[1:ind[i], 1]),
-                    P = weeks_per_yr, H = 1, week = head(rep(1:weeks_per_yr, years), ind[i])
+                    S = ncol(fourier_basis_scaled), bases_s = fourier_basis_scaled[(1:ind[i]),]
                     ))
 test_GT_NFR[[i]] = model_GT$sample(
     data = stan_data_GT_NFR,
@@ -559,9 +591,7 @@ mcmc_areas(test_GT_NFR[[test_num]]$draws("theta_logit_phi"), prob = 0.95, prob_o
 mcmc_areas(test_GT_NFR[[test_num]]$draws("mu_log_b"), prob = 0.95, prob_outer = 0.95)
 mcmc_areas(test_GT_NFR[[test_num]]$draws("mu_logit_phi"), prob = 0.95, prob_outer = 0.95)
 
-mcmc_areas(test_GT_NFR[[test_num]]$draws("sigma_beta"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_GT[[test_num]]$draws("alpha"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_GT[[test_num]]$draws("gamma"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT_NFR[[test_num]]$draws("sigma_eta"), prob = 0.95, prob_outer = 0.95)
 
 param_true = tibble(
     parameter = grep("^b\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
@@ -599,17 +629,31 @@ mcmc_areas(test_GT_NFR[[test_num]]$draws("N"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^beta_t\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+    parameter = grep("^beta_x\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
     x = beta1[1:ind[test_num]]
 )
-mcmc_areas(test_GT_NFR[[test_num]]$draws("beta_t"), prob_outer = 0.95) +
+mcmc_areas(test_GT_NFR[[test_num]]$draws("beta_x"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^s\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+    parameter = grep("^season\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
     x = s_t[1:ind[test_num]]
 )
-mcmc_areas(test_GT_NFR[[test_num]]$draws("s"), prob_outer = 0.95) +
+mcmc_areas(test_GT_NFR[[test_num]]$draws("season"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^beta_s\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+    x = beta_s
+)
+mcmc_areas(test_GT_NFR[[test_num]]$draws("beta_s"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^eta\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+    x = eta[1:ind[test_num]]
+)
+mcmc_areas(test_GT_NFR[[test_num]]$draws("eta"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 ```
 
