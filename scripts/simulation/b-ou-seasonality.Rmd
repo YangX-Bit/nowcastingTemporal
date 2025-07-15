@@ -146,7 +146,7 @@ params_b_ou_FR <- list(
   q_model = list(
     method        = "b_ou",
     method_params = list(theta_logb = 0.7, mu_logb = log(0.8), init_logb = log(0.8), sigma_logb = 0.5,
-                         theta_logitphi = 0.7, mu_logitphi = 1, init_logitphi = 1, sigma_logitphi = 0.4)
+                         theta_logitphi = 0.7, mu_logitphi = -1.5, init_logitphi = -1.5, sigma_logitphi = 0.4)
   )
 )
 b_ou_FR <- simulateData(params_b_ou_FR)
@@ -217,7 +217,9 @@ for (i in 1:length(ind)) {
   stan_data_GT <- c(list(T = ind[i], D = D, Y = b_ou_FR$case_reported_cumulated[1:ind[i], ]), hypers, 
                list(K = ncol(matrix(x_t)), x = as.matrix(matrix(x_t)[1:ind[i], 1]),
                     S = ncol(fourier_basis_scaled), bases_s = fourier_basis_scaled[(1:ind[i]),]
-                    ))
+                    ),
+               list(mean_logit_alpha = 0.95, sd_logit_alpha = 0.1)
+               )
 test_GT[[i]] = model_GT$sample(
     data = stan_data_GT,
     iter_sampling = 3000,
@@ -313,6 +315,8 @@ mean_crps_GT <- mean(crps_vec_GT)
 
 mean_crps
 mean_crps_GT
+
+
 ```
 
 
@@ -335,7 +339,7 @@ mcmc_areas(test[[test_num]]$draws("b"), prob_outer = 0.95) +
 
 param_true = tibble(
     parameter = grep("^phi\\[.+\\]$", varnames[[test_num]], value = TRUE),
-    x = 1 - b_ou_FR$phi[1:ind[test_num]]
+    x =  b_ou_FR$phi[1:ind[test_num]]
 )
 mcmc_areas(test[[test_num]]$draws("phi"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
@@ -383,9 +387,16 @@ mcmc_areas(test_GT[[test_num]]$draws("b"), prob_outer = 0.95) +
 
 param_true = tibble(
     parameter = grep("^phi\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
-    x = 1 - b_ou_FR$phi[1:ind[test_num]]
+    x = b_ou_FR$phi[1:ind[test_num]]
 )
 mcmc_areas(test_GT[[test_num]]$draws("phi"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^alpha\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
+    x = b_ou_FR$q[1:ind[test_num], D+1]
+)
+mcmc_areas(test_GT[[test_num]]$draws("alpha"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
@@ -455,7 +466,7 @@ params_b_ou_NFR <- list(
   q_model = list(
     method        = "b_ou",
     method_params = list(theta_logb = 0.4, mu_logb = log(0.2), init_logb = log(0.2), sigma_logb = 0.4,
-                         theta_logitphi = 0.4, mu_logitphi = 1.5, init_logitphi = 1.5, sigma_logitphi = 0.15)
+                         theta_logitphi = 0.4, mu_logitphi = -1.5, init_logitphi = -1.5, sigma_logitphi = 0.15)
   )
 )
 
@@ -506,7 +517,8 @@ for (i in 1:length(ind)) {
   stan_data_GT_NFR <- c(list(T = ind[i], D = D, Y = b_ou_FR$case_reported_cumulated[1:ind[i], ]), hypers, 
                list(K = ncol(matrix(x_t)), x = as.matrix(matrix(x_t)[1:ind[i], 1]),
                     S = ncol(fourier_basis_scaled), bases_s = fourier_basis_scaled[(1:ind[i]),]
-                    ))
+                    ),
+               list(mean_logit_alpha = 0.8, sd_logit_alpha = 0.1))
 test_GT_NFR[[i]] = model_GT$sample(
     data = stan_data_GT_NFR,
     iter_sampling = 3000,
@@ -602,10 +614,18 @@ mcmc_areas(test_GT_NFR[[test_num]]$draws("b"), prob_outer = 0.95) +
 
 param_true = tibble(
     parameter = grep("^phi\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
-    x = 1 - b_ou_NFR$phi[1:ind[test_num]]
+    x =  b_ou_NFR$phi[1:ind[test_num]]
 )
 mcmc_areas(test_GT_NFR[[test_num]]$draws("phi"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
+
+param_true = tibble(
+    parameter = grep("^alpha\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
+    x = b_ou_NFR$q[1:ind[test_num], D+1]
+)
+mcmc_areas(test_GT_NFR[[test_num]]$draws("alpha"), prob_outer = 0.95) +
+    geom_point(aes(x = x), param_true, color = "red", size = 1)
+
 
 param_true = tibble(
     parameter = grep("^lambda\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
@@ -655,5 +675,99 @@ param_true = tibble(
 )
 mcmc_areas(test_GT_NFR[[test_num]]$draws("eta"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
+```
+
+```{r}
+library(posterior)   # for mcmc_areas
+library(ggplot2)
+library(patchwork)
+
+# 1. β_x
+param_true_x <- tibble(
+  parameter = grep("^beta_x\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
+  x         = beta1[1:ind[test_num]]
+)
+p1 <- mcmc_areas(test_GT[[test_num]]$draws("beta_x"), prob_outer = 0.95) +
+  geom_point(data = param_true_x, aes(x = x), color = "red", size = 1) +
+  ggtitle("β_x")
+
+# 2. season
+param_true_s <- tibble(
+  parameter = grep("^season\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
+  x         = s_t[1:ind[test_num]]
+)
+p2 <- mcmc_areas(test_GT[[test_num]]$draws("season"), prob_outer = 0.95) +
+  geom_point(data = param_true_s, aes(x = x), color = "red", size = 1) +
+  ggtitle("season")
+
+# 3. β_s
+param_true_bs <- tibble(
+  parameter = grep("^beta_s\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
+  x         = beta_s
+)
+p3 <- mcmc_areas(test_GT[[test_num]]$draws("beta_s"), prob_outer = 0.95) +
+  geom_point(data = param_true_bs, aes(x = x), color = "red", size = 1) +
+  ggtitle("β_s")
+
+# 4. η
+param_true_eta <- tibble(
+  parameter = grep("^eta\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
+  x         = eta[1:ind[test_num]]
+)
+p4 <- mcmc_areas(test_GT[[test_num]]$draws("eta"), prob_outer = 0.95) +
+  geom_point(data = param_true_eta, aes(x = x), color = "red", size = 1) +
+  ggtitle("η")
+
+# 拼成 2×2
+(p1 | p2) /
+(p3 | p4) 
+
+```
+
+```{r}
+library(posterior)   # for mcmc_areas
+library(ggplot2)
+library(patchwork)
+
+# 1. β_x
+param_true_x <- tibble(
+  parameter = grep("^beta_x\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+  x         = beta1[1:ind[test_num]]
+)
+p1 <- mcmc_areas(test_GT_NFR[[test_num]]$draws("beta_x"), prob_outer = 0.95) +
+  geom_point(data = param_true_x, aes(x = x), color = "red", size = 1) +
+  ggtitle("β_x")
+
+# 2. season
+param_true_s <- tibble(
+  parameter = grep("^season\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+  x         = s_t[1:ind[test_num]]
+)
+p2 <- mcmc_areas(test_GT_NFR[[test_num]]$draws("season"), prob_outer = 0.95) +
+  geom_point(data = param_true_s, aes(x = x), color = "red", size = 1) +
+  ggtitle("season")
+
+# 3. β_s
+param_true_bs <- tibble(
+  parameter = grep("^beta_s\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+  x         = beta_s
+)
+p3 <- mcmc_areas(test_GT_NFR[[test_num]]$draws("beta_s"), prob_outer = 0.95) +
+  geom_point(data = param_true_bs, aes(x = x), color = "red", size = 1) +
+  ggtitle("β_s")
+
+# 4. η
+param_true_eta <- tibble(
+  parameter = grep("^eta\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+  x         = eta[1:ind[test_num]]
+)
+p4 <- mcmc_areas(test_GT_NFR[[test_num]]$draws("eta"), prob_outer = 0.95) +
+  geom_point(data = param_true_eta, aes(x = x), color = "red", size = 1) +
+  ggtitle("η")
+
+# 拼成 2×2
+(p1 | p2) /
+(p3 | p4) 
+
 ```
 
