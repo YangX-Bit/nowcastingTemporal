@@ -392,12 +392,12 @@ param_true = tibble(
 mcmc_areas(test_GT[[test_num]]$draws("phi"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
-param_true = tibble(
-    parameter = grep("^alpha\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
-    x = b_ou_FR$q[1:ind[test_num], D+1]
-)
-mcmc_areas(test_GT[[test_num]]$draws("alpha"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
+# param_true = tibble(
+#     parameter = grep("^alpha\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
+#     x = b_ou_FR$q[1:ind[test_num], D+1]
+# )
+# mcmc_areas(test_GT[[test_num]]$draws("alpha"), prob_outer = 0.95) +
+#     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
     parameter = grep("^lambda\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
@@ -465,8 +465,10 @@ params_b_ou_NFR <- list(
   ),
   q_model = list(
     method        = "b_ou",
-    method_params = list(theta_logb = 0.4, mu_logb = log(0.2), init_logb = log(0.2), sigma_logb = 0.4,
-                         theta_logitphi = 0.4, mu_logitphi = -1.5, init_logitphi = -1.5, sigma_logitphi = 0.15)
+    method_params = list(theta_logb = 0.4, mu_logb = log(0.05), init_logb = log(0.05), sigma_logb = 0.4,
+                         theta_logitphi = 0.4, mu_logitphi = -3, init_logitphi = -3, sigma_logitphi = 0.15)
+    # method_params = list(theta_logb = 0.4, mu_logb = log(0.2), init_logb = log(0.2), sigma_logb = 0.4,
+    #                      theta_logitphi = 0.4, mu_logitphi = -1.5, init_logitphi = -1.5, sigma_logitphi = 0.15)
   )
 )
 
@@ -619,12 +621,12 @@ param_true = tibble(
 mcmc_areas(test_GT_NFR[[test_num]]$draws("phi"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
-param_true = tibble(
-    parameter = grep("^alpha\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
-    x = b_ou_NFR$q[1:ind[test_num], D+1]
-)
-mcmc_areas(test_GT_NFR[[test_num]]$draws("alpha"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
+# param_true = tibble(
+#     parameter = grep("^alpha\\[.+\\]$", varnames_GT[[test_num]], value = TRUE),
+#     x = b_ou_NFR$q[1:ind[test_num], D+1]
+# )
+# mcmc_areas(test_GT_NFR[[test_num]]$draws("alpha"), prob_outer = 0.95) +
+#     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 
 param_true = tibble(

@@ -11,8 +11,8 @@ data {
   real<lower=0>      sd_log_b;
   
   // Hyperparameters for alpha
-  real mean_logit_alpha;
-  real<lower=0> sd_logit_alpha;
+  // real mean_logit_alpha;
+  // real<lower=0> sd_logit_alpha;
 
   // (3) Covariates (time-varying effects)
   int<lower=1>       K;                   // number of covariates
@@ -31,15 +31,15 @@ parameters {
   // (A) Delay-model (OU) parameters
   vector[T]          log_b;
   vector[T]          logit_phi;
-  vector[T]          logit_alpha;  
+  // vector[T]          logit_alpha;  
   real               mu_log_b;
   real               mu_logit_phi;
-  real               mu_logit_alpha;   
+  // real               mu_logit_alpha;   
   real<lower=0>      theta_log_b;
   real<lower=0>      theta_logit_phi;
   real<lower=0>      sigma_log_b;
   real<lower=0>      sigma_logit_phi;
-  real<lower=0>      sigma_logit_alpha;
+  // real<lower=0>      sigma_logit_alpha;
 
   // (B) Covariate effect
   real                beta0;
@@ -59,13 +59,14 @@ transformed parameters {
   // (1) Delay-model
   vector<lower=0>[T]            b      = exp(log_b);
   vector<lower=0,upper=1>[T]    phi    = inv_logit(logit_phi);
-  vector<lower=0,upper=1>[T]   alpha   = inv_logit(logit_alpha);
+  // vector<lower=0,upper=1>[T]   alpha   = inv_logit(logit_alpha);
   matrix[T, D+1]       q;
   matrix[T, D+1]       log_q;
   for (t in 1:T) {
     for (d in 0:D) {
       if (t + d <= T) {
-        q[t, d+1]     = alpha[t] - (alpha[t] - phi[t]) * exp(-b[t] * d);
+        // q[t, d+1]     = alpha[t] - (alpha[t] - phi[t]) * exp(-b[t] * d);
+        q[t, d+1]     = 1 - (1 - phi[t]) * exp(-b[t] * d);
         log_q[t, d+1] = log(q[t, d+1]);
       } else {
         q[t, d+1]     = 0;
@@ -97,11 +98,11 @@ model {
   theta_logit_phi ~ lognormal(0, 1);
   sigma_log_b     ~ lognormal(-2, 1);
   sigma_logit_phi ~ lognormal(-2, 1);
-  sigma_logit_alpha ~ lognormal(-3, 1); // less var
+  // sigma_logit_alpha ~ lognormal(-3, 1); // less var
 
   log_b[1]        ~ normal(mu_log_b, sigma_log_b);
   logit_phi[1]    ~ normal(mu_logit_phi, sigma_logit_phi);
-  logit_alpha[1] ~ normal(mean_logit_alpha, sqrt(sd_logit_alpha^2 + sigma_logit_alpha^2 * factor));
+  // logit_alpha[1] ~ normal(mean_logit_alpha, sqrt(sd_logit_alpha^2 + sigma_logit_alpha^2 * factor));
   for (t in 2:T) {
     log_b[t]      ~ normal(
                        log_b[t-1]
@@ -113,7 +114,7 @@ model {
                      + theta_logit_phi * (mu_logit_phi - logit_phi[t-1]),
                      sigma_logit_phi
                    );
-    logit_alpha[t] ~ normal(logit_alpha[t-1], sigma_logit_alpha);
+    // logit_alpha[t] ~ normal(logit_alpha[t-1], sigma_logit_alpha);
   }
 
   // --- (B) Covariate effect priors (adjusted) ---
