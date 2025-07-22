@@ -119,19 +119,21 @@ model {
 
   // --- (B) Covariate effect priors (adjusted) ---
   beta0         ~ normal(0, 1);
+  
+  sigma_beta_x  ~ normal(0, 0.2);
   for (k in 1:K)
     for (t in 1:T)
       beta_x[k, t] ~ normal(0, sigma_beta_x);
-  sigma_beta_x  ~ normal(0, 0.2);
-
+      
   // --- (C) Seasonality priors (match original α/γ prior) ---
   for (i in 1:S)
     beta_s[i]    ~ normal(0, 0.2);
   sigma_s      ~ normal(0, 1);
 
   // --- (D) Noise prior (original) ---
-  eta           ~ normal(0, sigma_eta);
   sigma_eta     ~ normal(0, 0.2);
+  eta           ~ normal(0, sigma_eta);
+
 
   // --- Likelihood over delays ---
   for (t in 1:T)
