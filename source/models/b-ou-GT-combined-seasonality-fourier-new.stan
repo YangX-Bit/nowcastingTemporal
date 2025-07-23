@@ -135,7 +135,7 @@ model {
   // --- (2) Predictor coefficient ---
   beta0         ~ normal(0, 0.1);
   
-  beta_x        ~ normal(0, 0.02);
+  beta_x        ~ normal(0, 0.5);
       
   // --- (3) Seasonality priors (match original α/γ prior) ---
   for (i in 1:S)

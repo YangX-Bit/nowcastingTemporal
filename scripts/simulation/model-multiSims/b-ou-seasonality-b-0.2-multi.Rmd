@@ -1,0 +1,447 @@
+---
+title: "Time-varying parametric reported probability: OU process"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(cmdstanr)
+library(splines)
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+library(bayesplot)
+library(scoringRules)
+library(purrr)
+```
+
+```{r}
+path_proj = here::here()
+path_source_nowcasting <- file.path(dirname(path_proj), "nowcasting", "source")
+
+source(file.path(path_source_nowcasting, "simulation", "simulations_functions_final.R"))
+source(file.path(path_source_nowcasting, "functions", "prior_function.R"))
+post_draws_path = file.path(path_proj, "data", "posterior")
+
+source(file.path(path_proj, "source", "functions", "simulation_functions.R"))
+
+error_metrics <- function(predicted, actual) {
+  # same length
+  stopifnot(length(predicted) == length(actual))
+  
+  # RMSE (Root Mean Squared Error)
+  rmse <- sqrt(mean((predicted - actual)^2))
+  
+  # RMSPE (Root Mean Squared Percentage Error)
+  rmspe <- sqrt(mean(((predicted - actual)/actual)^2)) * 100
+  
+  # MAE (Mean Absolute Error)
+  mae <- mean(abs(predicted - actual))
+  
+  # MAPE (Mean Absolute Percentage Error)
+  mape <- mean(abs((predicted - actual)/actual)) * 100
+
+  list(RMSE = rmse,
+       RMSPE = rmspe,
+       MAE = mae,
+       MAPE = mape)
+}
+```
+
+```{r}
+b_ou <-  file.path(path_source_nowcasting, "models", "b-ou.stan")
+model_bsl <- cmdstan_model(b_ou)
+
+#file.path(dirname(dirname(path_proj)),"cmdstan-2.32.0")
+#set_cmdstan_path(file.path(dirname(dirname(path_proj)),"cmdstan-2.32.0"))
+
+b_ou_lambda <-  file.path(path_proj, "source", "models", "b-ou-GT-combined-seasonality-fourier-new.stan")
+# b_ou_lambda <- file.path(path_proj, "source", "models", "b-ou-GT-time-varying-betas.stan")
+model_prps <- cmdstan_model(b_ou_lambda)
+```
+# GT
+
+```{r}
+# --- preliminaries unchanged -------------------------------------------------
+#set.seed(111)
+years <- 3; weeks_per_yr <- 52; T_len <- years * weeks_per_yr
+t     <- seq_len(T_len)
+week  <- ((t - 1) %% weeks_per_yr) + 1
+E     <- 1000
+
+num_sims = 5
+n_weeks   <- c(52,104)
+lambda_seq <- matrix(NA, ncol = T_len, nrow = num_sims)
+
+
+# set the total var and ratio
+total_var = 0.1
+
+tau_epsilon <- 1
+tau_ar <- 4
+tau_cov <- 4
+
+sigma_epsilon <- sqrt(total_var * tau_epsilon / (tau_epsilon + tau_ar + tau_cov))
+sd_ar <- sqrt(total_var * tau_ar / (tau_epsilon + tau_ar + tau_cov))
+beta1 <- sqrt(total_var * tau_cov / (tau_epsilon + tau_ar + tau_cov))
+
+# --- seasonality ---------------------------------------------------
+# --- baisc setting -------------------------------------------------
+H_max <- 10            # harmonic
+P     <- weeks_per_yr   # periodic
+
+# --- Fourier basis -------------------------------------------------
+# to each h，we generate cos(h*angle) and sin(h*angle)
+angle <- 2 * pi * (t - 1) / P  # for each t we have one angle
+fourier_list <- lapply(1:H_max, function(h) {
+  cbind(
+    cos_h = cos(h * angle),
+    sin_h = sin(h * angle)
+  )
+})
+fourier_basis <- do.call(cbind, fourier_list)
+# column name
+colnames(fourier_basis) <- unlist(lapply(1:H_max, function(h) {
+  c(paste0("cos_h", h), paste0("sin_h", h))
+}))
+
+# (fixed, to make it simplier)
+# --- coefficient beta_s for seasonality---------------------------------
+set.seed(3)
+H_used <- 5
+ratio  <- c(10, 2, 1, 1, 1) # ratio of each frequency (SD)）  
+sigma_s    <- 0.5                # total variance
+
+# —— calc the scaling ratio c ——  
+# total "share" of var：
+sigma_s_raw <- sum(2 * (ratio^2))  
+# scaling ratio：
+c     <- sqrt(sigma_s / sigma_s_raw)  
+
+# —— σ_h ——  
+sd_h   <- ratio * c           
+sd_all <- rep(sd_h, each = 2)  # twice，for each cos_h and sin_h  
+
+# —— generate beta_s and s_t ——  
+beta_s <- rnorm(2 * H_used, mean = 0, sd = sd_all)  
+s_t    <- as.vector(fourier_basis[, 1:(2*H_used)] %*% beta_s)
+
+# clear seeds
+rm(.Random.seed, envir = .GlobalEnv)
+
+# sims loop
+
+for (i in 1:num_sims) {
+  # --- (1) Independent noise ---------------------------------------------------
+  #sigma_epsilon  <- 0.1
+  epsilon_t    <- rnorm(T_len, mean = 0, sd = sigma_epsilon)
+  
+  # --- (2) Dependent noise ---------------------------------------------------
+  # sigma_epsilon = sqrt((1- rho_w^2) * var_ar)
+  #sd_ar <- 0.1
+  rho_w <- 0.8
+  sigma_w  <- sqrt((1-rho_w^2) * sd_ar^2)
+  w_t <- arima.sim(model = list(ar = rho_w), n = T_len,
+                   sd = sigma_w)
+  
+  # --- (3) covariate X_t -------------------------------------------------------
+  #x_t <- scale(rnorm(T_len))[, 1]        # standard normal, independent of other components
+  x_t <- rnorm(T_len) 
+  #beta1     <- 0.1
+  beta0 <- 0.2
+  
+  # --- (4) Risk -------------------------------------------------------
+  
+  log_lambda <- beta0 + beta1 * x_t + s_t + w_t + epsilon_t
+  
+  lambda_t   <- exp(log_lambda)
+  mu_t  <- E * lambda_t
+  
+  lambda_seq[i,] <- mu_t
+}
+
+lambda <- mu_t
+
+```
+
+## Non-fully reported scenario
+
+### Simulation - Not fully reported - Moderate
+
+```{r}
+D <- 15
+data_NFRM <- list()
+
+for (j in 1:num_sims) {
+  data_NFRM[[j]] <- simulateData(
+    params = list(
+      data = list(
+        lambda = lambda,
+        T       = T_len,
+        date_start = as.Date("2024-01-01"),
+        D = D
+      ),
+      q_model = list(
+        method        = "b_ou",
+        method_params = list(theta_logb = 0.7, mu_logb = log(0.2), init_logb = log(0.2), sigma_logb = 0.4,
+                             theta_logitphi = 0.7, 
+                             mu_logitphi = inverse_logistic_transform(0.2, 0, 1), 
+                             init_logitphi = inverse_logistic_transform(0.2, 0, 1), sigma_logitphi = 0.15)
+      )
+    )
+  )
+}
+
+par(mfrow = c(2, 3))
+for (i in 1:num_sims) {
+  matplot(t(data_NFRM[[i]]$q), type = "l", lty = 1, ylim = c(0, 1))
+}
+
+
+```
+
+### Model fitting
+
+```{r}
+#setting
+iter_sampling = 10000
+iter_warmup   = 2000
+chains        = 3
+refresh       = 0
+thin          = 1
+
+# 1) param table
+param_tbl <- expand.grid(
+  n_weeks = n_weeks,
+  run     = seq_len(num_sims)
+)
+
+hypers = hypers_q(phi_ref = 0.1, D_ref = 25, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
+# 2) run everything
+
+results_bsl_NFRM <- pmap(param_tbl, function(n_weeks, run) {
+  message("Simulating: ", n_weeks, " weeks — run ", run)
+  
+  stan_data <- c(
+    list(
+      T = n_weeks,
+      D = D,
+      Y = data_NFRM[[run]]$case_reported_cumulated[1:n_weeks, ]
+    ),
+    hypers
+  )
+
+  fit <- model_bsl$sample(
+    data          = stan_data,
+    iter_sampling = iter_sampling,
+    iter_warmup   = iter_warmup,
+    chains        = chains,
+    refresh       = refresh,
+    thin          = thin,
+    output_dir = post_draws_path
+  )
+  
+  list(
+    fit      = fit,
+    varnames = fit$summary()$variable,
+    N  = fit$summary(variables = "N")$mean
+  )
+})
+
+# 4) Result
+fit_bsl_NFRM     <- map(results_bsl_NFRM, "fit")
+varnames_bsl_NFRM <- map(results_bsl_NFRM, "varnames")
+N_bsl_NFRM  <- map(results_bsl_NFRM, "N")
+
+```
+
+```{r}
+hypers = hypers_q(phi_ref = 0.1, D_ref = 25, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
+
+# run everything
+results_prps_NFRM <- pmap(param_tbl, function(n_weeks, run) {
+  message("Simulating: ", n_weeks, " weeks — run ", run)
+  
+  stan_data <-     c(
+    list(T = n_weeks, 
+         D = D, 
+         Y = data_NFRM[[run]]$case_reported_cumulated[1:n_weeks, ]), 
+    hypers, 
+    list(K = ncol(matrix(x_t)), 
+         x = as.matrix(matrix(x_t)[1:n_weeks, 1]),
+         S = H_used*2,  
+         bases_s = fourier_basis[(1:n_weeks),1:(H_used*2)],
+         E = E
+    )
+  )
+
+  fit <- model_prps$sample(
+    data          = stan_data,
+    iter_sampling = iter_sampling,
+    iter_warmup   = iter_warmup,
+    chains        = chains,
+    refresh       = refresh,
+    thin          = thin,
+    output_dir = post_draws_path
+  )
+  
+  list(
+    fit      = fit,
+    varnames = fit$summary()$variable,
+    N  = fit$summary(variables = "N")$mean
+  )
+})
+
+# 4) Result
+fit_prps_NFRM     <- map(results_prps_NFRM, "fit")
+varnames_prps_NFRM <- map(results_prps_NFRM, "varnames")
+N_prps_NFRM  <- map(results_prps_NFRM, "N")
+```
+
+```{r}
+n_w      <- length(n_weeks)           
+total_runs <- n_w * num_sims
+last_lens  <- c(3, 5, D)               # diff length
+
+# 2) list of list
+all_results <- vector("list", length(last_lens))
+names(all_results) <- paste0("last_", last_lens)
+
+# 3) for each last_len  -----------------------------------------------
+for (li in seq_along(last_lens)) {
+  L <- last_lens[li]     # current last_len
+  # list of list under the current last_llen
+  metrics_prps <- vector("list", n_w)
+  metrics_bsl  <- vector("list", n_w)
+  for (i in seq_len(n_w)) {
+    metrics_prps[[i]] <- vector("list", num_sims)
+    metrics_bsl[[i]]  <- vector("list", num_sims)
+  }
+  
+  # n_weeks * iteration
+  for (i in seq_along(n_weeks)) {
+    wks <- n_weeks[i]
+    for (run in seq_len(num_sims)) {
+      idx       <- (run - 1) * n_w + i
+      pred_bsl  <- tail(N_bsl_NFRM[[idx]],  L)
+      pred_prps <- tail(N_prps_NFRM[[idx]], L)
+      actual    <- tail(data_NFRM[[run]]$case_true[1:wks], L)
+      
+      metrics_bsl[[i]][[run]]  <- error_metrics(pred_bsl,  actual)
+      metrics_prps[[i]][[run]] <- error_metrics(pred_prps, actual)
+    }
+  }
+  
+  # take average
+  out <- data.frame(
+    last_len = L,
+    n_weeks  = n_weeks,
+    prps_RMSE  = NA, prps_RMSPE = NA, prps_MAE = NA, prps_MAPE = NA,
+    bsl_RMSE   = NA, bsl_RMSPE  = NA, bsl_MAE  = NA, bsl_MAPE  = NA
+  )
+  for (i in seq_along(n_weeks)) {
+    prps_list <- metrics_prps[[i]]
+    bsl_list  <- metrics_bsl[[i]]
+    
+    out$prps_RMSE[i]  <- mean(sapply(prps_list, `[[`, "RMSE"))
+    out$prps_RMSPE[i] <- mean(sapply(prps_list, `[[`, "RMSPE"))
+    out$prps_MAE[i]   <- mean(sapply(prps_list, `[[`, "MAE"))
+    out$prps_MAPE[i]  <- mean(sapply(prps_list, `[[`, "MAPE"))
+    
+    out$bsl_RMSE[i]   <- mean(sapply(bsl_list,  `[[`, "RMSE"))
+    out$bsl_RMSPE[i]  <- mean(sapply(bsl_list,  `[[`, "RMSPE"))
+    out$bsl_MAE[i]    <- mean(sapply(bsl_list,  `[[`, "MAE"))
+    out$bsl_MAPE[i]   <- mean(sapply(bsl_list,  `[[`, "MAPE"))
+  }
+  
+  # save this group
+  all_results[[li]] <- out
+}
+
+# 4) combine each last_len
+final_tbl <- do.call(rbind, all_results)
+row.names(final_tbl) <- NULL
+
+final_long <- final_tbl %>%
+  pivot_longer(
+    cols      = -c(last_len, n_weeks),
+    names_to  = c("model", "metric"),
+    names_sep = "_",
+    values_to = "value"
+  ) %>%
+  pivot_wider(
+    names_from  = model,
+    values_from = value
+  ) %>%
+  mutate(across(c(prps, bsl), ~ round(.x, 2)),
+         diff_bsl_minus_prps = bsl - prps) 
+final_long
+
+```
+
+
+
+```{r}
+# 1) Prepare storage for each last_len
+all_crps <- vector("list", length(last_lens))
+names(all_crps) <- paste0("last_", last_lens)
+
+# 2) Loop over each tail length
+for (li in seq_along(last_lens)) {
+  L <- last_lens[li]
+  
+  # per-window CRPS vectors
+  crps_prps <- numeric(length(n_weeks))
+  crps_bsl  <- numeric(length(n_weeks))
+  
+  # 3) Loop over each window size
+  for (i in seq_along(n_weeks)) {
+    wks <- n_weeks[i]
+    tmp_prps <- numeric(num_sims)
+    tmp_bsl  <- numeric(num_sims)
+    
+    # 4) Loop over each simulation run
+    for (run in seq_len(num_sims)) {
+      idx    <- (run - 1) * length(n_weeks) + i
+      y_true <- tail(data_NFRM[[run]]$case_true[1:wks], L)
+      
+      # proposed model draws → (time × draws) matrix
+      pred_prps <- t(fit_prps_NFRM[[idx]]$draws("N", format = "draws_matrix"))
+      tmp_prps[run] <- mean(crps_sample(y = y_true, dat = pred_prps[(wks-L+1):wks, ]))
+      
+      # baseline model
+      pred_bsl <- t(fit_bsl_NFRM[[idx]]$draws("N", format = "draws_matrix"))
+      tmp_bsl[run] <- mean(crps_sample(y = y_true, dat = pred_bsl[(wks-L+1):wks, ]))
+    }
+    
+    # average over runs
+    crps_prps[i] <- mean(tmp_prps)
+    crps_bsl[i]  <- mean(tmp_bsl)
+  }
+  
+  # 5) Store results for this last_len
+  all_crps[[li]] <- data.frame(
+    last_len  = L,
+    n_weeks   = n_weeks,
+    prps_CRPS = crps_prps,
+    bsl_CRPS  = crps_bsl,
+    diff_CRPS = crps_bsl - crps_prps
+  )
+}
+
+# 6) Combine and reshape for easy comparison
+final_crps_tbl <- do.call(rbind, all_crps)
+rownames(final_crps_tbl) <- NULL
+# final_crps_long <- final_crps_tbl %>%
+#   pivot_longer(
+#     cols      = c(prps_CRPS, bsl_CRPS, diff_CRPS),
+#     names_to  = "model",
+#     values_to = "CRPS"
+#   )
+
+print(final_crps_tbl)
+# print(final_crps_long)
+```
+
+
