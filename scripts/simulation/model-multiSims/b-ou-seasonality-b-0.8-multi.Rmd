@@ -14,6 +14,7 @@ library(dplyr)
 library(bayesplot)
 library(scoringRules)
 library(purrr)
+library(tictoc)
 ```
 
 ```{r}
@@ -22,7 +23,7 @@ path_source_nowcasting <- file.path(dirname(path_proj), "nowcasting", "source")
 
 source(file.path(path_source_nowcasting, "simulation", "simulations_functions_final.R"))
 source(file.path(path_source_nowcasting, "functions", "prior_function.R"))
-post_draws_path = file.path(path_proj, "data", "posterior")
+post_draws_path = file.path(file.path(dirname(dirname(path_proj)),"projects","draws"))
 
 source(file.path(path_proj, "source", "functions", "simulation_functions.R"))
 
@@ -63,6 +64,7 @@ model_prps <- cmdstan_model(b_ou_lambda)
 # GT
 
 ```{r}
+   
 # --- preliminaries unchanged -------------------------------------------------
 #set.seed(111)
 years <- 3; weeks_per_yr <- 52; T_len <- years * weeks_per_yr
@@ -197,17 +199,16 @@ par(mfrow = c(2, 3))
 for (i in 1:num_sims) {
   matplot(t(data_FR[[i]]$q), type = "l", lty = 1, ylim = c(0, 1))
 }
-
-
 ```
 
 ### Model fitting
 
 ```{r}
+tic("FR baseline model")
 #setting
-iter_sampling = 10000
-iter_warmup   = 2000
-chains        = 3
+iter_sampling = 5000
+iter_warmup   = 1000
+chains        = 2
 refresh       = 0
 thin          = 1
 
@@ -254,9 +255,11 @@ fit_bsl_FR     <- map(results_bsl_FR, "fit")
 varnames_bsl_FR <- map(results_bsl_FR, "varnames")
 N_bsl_FR  <- map(results_bsl_FR, "N")
 
+toc(log = TRUE) 
 ```
 
 ```{r}
+tic("FR proposed model")
 hypers = hypers_q(phi_ref = 0.1, D_ref = 25, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 
 # run everything
@@ -297,6 +300,8 @@ results_prps_FR <- pmap(param_tbl, function(n_weeks, run) {
 fit_prps_FR     <- map(results_prps_FR, "fit")
 varnames_prps_FR <- map(results_prps_FR, "varnames")
 N_prps_FR  <- map(results_prps_FR, "N")
+
+toc(log = TRUE) 
 ```
 
 ```{r}
@@ -360,10 +365,10 @@ for (li in seq_along(last_lens)) {
 }
 
 # 4) combine each last_len
-final_tbl <- do.call(rbind, all_results)
-row.names(final_tbl) <- NULL
+final_tbl_FR <- do.call(rbind, all_results)
+row.names(final_tbl_FR) <- NULL
 
-final_long <- final_tbl %>%
+final_long_FR <- final_tbl_FR %>%
   pivot_longer(
     cols      = -c(last_len, n_weeks),
     names_to  = c("model", "metric"),
@@ -376,7 +381,7 @@ final_long <- final_tbl %>%
   ) %>%
   mutate(across(c(prps, bsl), ~ round(.x, 2)),
          diff_bsl_minus_prps = bsl - prps) 
-final_long
+final_long_FR
 
 ```
 
@@ -431,8 +436,8 @@ for (li in seq_along(last_lens)) {
 }
 
 # 6) Combine and reshape for easy comparison
-final_crps_tbl <- do.call(rbind, all_crps)
-rownames(final_crps_tbl) <- NULL
+final_crps_tbl_FR <- do.call(rbind, all_crps)
+rownames(final_crps_tbl_FR) <- NULL
 # final_crps_long <- final_crps_tbl %>%
 #   pivot_longer(
 #     cols      = c(prps_CRPS, bsl_CRPS, diff_CRPS),
@@ -440,7 +445,7 @@ rownames(final_crps_tbl) <- NULL
 #     values_to = "CRPS"
 #   )
 
-print(final_crps_tbl)
+print(final_crps_tbl_FR)
 # print(final_crps_long)
 ```
 
