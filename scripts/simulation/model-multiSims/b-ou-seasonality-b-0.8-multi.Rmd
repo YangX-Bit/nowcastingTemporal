@@ -60,6 +60,13 @@ model_bsl <- cmdstan_model(b_ou)
 b_ou_lambda <-  file.path(path_proj, "source", "models", "b-ou-GT-combined-seasonality-fourier-new.stan")
 # b_ou_lambda <- file.path(path_proj, "source", "models", "b-ou-GT-time-varying-betas.stan")
 model_prps <- cmdstan_model(b_ou_lambda)
+
+#setting
+iter_sampling = 10000
+iter_warmup   = 3000
+chains        = 2 
+refresh       = 0
+thin          = 1
 ```
 # GT
 
@@ -72,8 +79,9 @@ t     <- seq_len(T_len)
 week  <- ((t - 1) %% weeks_per_yr) + 1
 E     <- 1000
 
-num_sims = 5
-n_weeks   <-  c(52,104)
+num_sims = 1
+n_weeks   <-  c(105, 118, 131, 144, 156)
+# c(114, 124, 134, 144, 154)
 lambda_seq <- matrix(NA, ncol = T_len, nrow = num_sims)
 
 
@@ -172,6 +180,8 @@ lambda <- mu_t
 ### Simulation - Fully reported 
 
 ```{r}
+
+
 D <- 15
 data_FR <- list()
 
@@ -199,18 +209,15 @@ par(mfrow = c(2, 3))
 for (i in 1:num_sims) {
   matplot(t(data_FR[[i]]$q), type = "l", lty = 1, ylim = c(0, 1))
 }
+
+
+t1_bsl_FR <- Sys.time()
 ```
 
 ### Model fitting
 
 ```{r}
-tic("FR baseline model")
-#setting
-iter_sampling = 5000
-iter_warmup   = 1000
-chains        = 2
-refresh       = 0
-thin          = 1
+t0_bsl_FR <- Sys.time()
 
 # 1) param table
 param_tbl <- expand.grid(
@@ -255,11 +262,11 @@ fit_bsl_FR     <- map(results_bsl_FR, "fit")
 varnames_bsl_FR <- map(results_bsl_FR, "varnames")
 N_bsl_FR  <- map(results_bsl_FR, "N")
 
-toc(log = TRUE) 
+t1_bsl_FR <- Sys.time()
 ```
 
 ```{r}
-tic("FR proposed model")
+t0_prps_FR <- Sys.time()
 hypers = hypers_q(phi_ref = 0.1, D_ref = 25, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 
 # run everything
@@ -301,7 +308,7 @@ fit_prps_FR     <- map(results_prps_FR, "fit")
 varnames_prps_FR <- map(results_prps_FR, "varnames")
 N_prps_FR  <- map(results_prps_FR, "N")
 
-toc(log = TRUE) 
+t1_prps_FR <- Sys.time()
 ```
 
 ```{r}

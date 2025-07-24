@@ -59,6 +59,14 @@ model_bsl <- cmdstan_model(b_ou)
 b_ou_lambda <-  file.path(path_proj, "source", "models", "b-ou-GT-combined-seasonality-fourier-new.stan")
 # b_ou_lambda <- file.path(path_proj, "source", "models", "b-ou-GT-time-varying-betas.stan")
 model_prps <- cmdstan_model(b_ou_lambda)
+
+#setting
+iter_sampling = 10000
+iter_warmup   = 3000
+chains        = 2 
+refresh       = 0
+thin          = 1
+
 ```
 # GT
 
@@ -70,9 +78,9 @@ t     <- seq_len(T_len)
 week  <- ((t - 1) %% weeks_per_yr) + 1
 E     <- 1000
 
-num_sims = 5
-n_weeks   <- c(52,104)
-lambda_seq <- matrix(NA, ncol = T_len, nrow = num_sims)
+num_sims = 1
+n_weeks   <-  c(105, 118, 131, 144, 156)
+lambda_seq_NFRM <- matrix(NA, ncol = T_len, nrow = num_sims)
 
 
 # set the total var and ratio
@@ -158,7 +166,7 @@ for (i in 1:num_sims) {
   lambda_t   <- exp(log_lambda)
   mu_t  <- E * lambda_t
   
-  lambda_seq[i,] <- mu_t
+  lambda_seq_NFRM[i,] <- mu_t
 }
 
 lambda <- mu_t
@@ -204,16 +212,10 @@ for (i in 1:num_sims) {
 ### Model fitting
 
 ```{r}
-tic("NFRM baseline model")
-#setting
-iter_sampling = 5000
-iter_warmup   = 1000
-chains        = 2
-refresh       = 0
-thin          = 1
+t0_bsl_NFRM <- Sys.time()
 
 # 1) param table
-param_tbl <- expand.grid(
+param_tbl_NFRM <- expand.grid(
   n_weeks = n_weeks,
   run     = seq_len(num_sims)
 )
@@ -221,7 +223,7 @@ param_tbl <- expand.grid(
 hypers = hypers_q(phi_ref = 0.1, D_ref = 25, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 # 2) run everything
 
-results_bsl_NFRM <- pmap(param_tbl, function(n_weeks, run) {
+results_bsl_NFRM <- pmap(param_tbl_NFRM, function(n_weeks, run) {
   message("Simulating: ", n_weeks, " weeks — run ", run)
   
   stan_data <- c(
@@ -255,15 +257,15 @@ fit_bsl_NFRM     <- map(results_bsl_NFRM, "fit")
 varnames_bsl_NFRM <- map(results_bsl_NFRM, "varnames")
 N_bsl_NFRM  <- map(results_bsl_NFRM, "N")
 
-toc(log = TRUE) 
+t1_bsl_NFRM <- Sys.time()
 ```
 
 ```{r}
-tic("NFRM proposed model")
+t0_prps_NFRM <- Sys.time()
 hypers = hypers_q(phi_ref = 0.1, D_ref = 25, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 
 # run everything
-results_prps_NFRM <- pmap(param_tbl, function(n_weeks, run) {
+results_prps_NFRM <- pmap(param_tbl_NFRM, function(n_weeks, run) {
   message("Simulating: ", n_weeks, " weeks — run ", run)
   
   stan_data <-     c(
@@ -301,27 +303,28 @@ fit_prps_NFRM     <- map(results_prps_NFRM, "fit")
 varnames_prps_NFRM <- map(results_prps_NFRM, "varnames")
 N_prps_NFRM  <- map(results_prps_NFRM, "N")
 
-toc(log = TRUE) 
+t1_prps_NFRM <- Sys.time()
 ```
 
 ```{r}
+
 n_w      <- length(n_weeks)           
 total_runs <- n_w * num_sims
 last_lens  <- c(3, 5, D)               # diff length
 
 # 2) list of list
-all_results <- vector("list", length(last_lens))
-names(all_results) <- paste0("last_", last_lens)
+all_results_NFRM <- vector("list", length(last_lens))
+names(all_results_NFRM) <- paste0("last_", last_lens)
 
 # 3) for each last_len  -----------------------------------------------
 for (li in seq_along(last_lens)) {
   L <- last_lens[li]     # current last_len
   # list of list under the current last_llen
-  metrics_prps <- vector("list", n_w)
-  metrics_bsl  <- vector("list", n_w)
+  metrics_prps_NFRM <- vector("list", n_w)
+  metrics_bsl_NFRM  <- vector("list", n_w)
   for (i in seq_len(n_w)) {
-    metrics_prps[[i]] <- vector("list", num_sims)
-    metrics_bsl[[i]]  <- vector("list", num_sims)
+    metrics_prps_NFRM[[i]] <- vector("list", num_sims)
+    metrics_bsl_NFRM[[i]]  <- vector("list", num_sims)
   }
   
   # n_weeks * iteration
@@ -333,8 +336,8 @@ for (li in seq_along(last_lens)) {
       pred_prps <- tail(N_prps_NFRM[[idx]], L)
       actual    <- tail(data_NFRM[[run]]$case_true[1:wks], L)
       
-      metrics_bsl[[i]][[run]]  <- error_metrics(pred_bsl,  actual)
-      metrics_prps[[i]][[run]] <- error_metrics(pred_prps, actual)
+      metrics_bsl_NFRM[[i]][[run]]  <- error_metrics(pred_bsl,  actual)
+      metrics_prps_NFRM[[i]][[run]] <- error_metrics(pred_prps, actual)
     }
   }
   
@@ -346,26 +349,26 @@ for (li in seq_along(last_lens)) {
     bsl_RMSE   = NA, bsl_RMSPE  = NA, bsl_MAE  = NA, bsl_MAPE  = NA
   )
   for (i in seq_along(n_weeks)) {
-    prps_list <- metrics_prps[[i]]
-    bsl_list  <- metrics_bsl[[i]]
+    prps_list_NFRM <- metrics_prps_NFRM[[i]]
+    bsl_list_NFRM  <- metrics_bsl_NFRM[[i]]
     
-    out$prps_RMSE[i]  <- mean(sapply(prps_list, `[[`, "RMSE"))
-    out$prps_RMSPE[i] <- mean(sapply(prps_list, `[[`, "RMSPE"))
-    out$prps_MAE[i]   <- mean(sapply(prps_list, `[[`, "MAE"))
-    out$prps_MAPE[i]  <- mean(sapply(prps_list, `[[`, "MAPE"))
+    out$prps_RMSE[i]  <- mean(sapply(prps_list_NFRM, `[[`, "RMSE"))
+    out$prps_RMSPE[i] <- mean(sapply(prps_list_NFRM, `[[`, "RMSPE"))
+    out$prps_MAE[i]   <- mean(sapply(prps_list_NFRM, `[[`, "MAE"))
+    out$prps_MAPE[i]  <- mean(sapply(prps_list_NFRM, `[[`, "MAPE"))
     
-    out$bsl_RMSE[i]   <- mean(sapply(bsl_list,  `[[`, "RMSE"))
-    out$bsl_RMSPE[i]  <- mean(sapply(bsl_list,  `[[`, "RMSPE"))
-    out$bsl_MAE[i]    <- mean(sapply(bsl_list,  `[[`, "MAE"))
-    out$bsl_MAPE[i]   <- mean(sapply(bsl_list,  `[[`, "MAPE"))
+    out$bsl_RMSE[i]   <- mean(sapply(bsl_list_NFRM,  `[[`, "RMSE"))
+    out$bsl_RMSPE[i]  <- mean(sapply(bsl_list_NFRM,  `[[`, "RMSPE"))
+    out$bsl_MAE[i]    <- mean(sapply(bsl_list_NFRM,  `[[`, "MAE"))
+    out$bsl_MAPE[i]   <- mean(sapply(bsl_list_NFRM,  `[[`, "MAPE"))
   }
   
   # save this group
-  all_results[[li]] <- out
+  all_results_NFRM[[li]] <- out
 }
 
 # 4) combine each last_len
-final_tbl_NFRM <- do.call(rbind, all_results)
+final_tbl_NFRM <- do.call(rbind, all_results_NFRM)
 row.names(final_tbl_NFRM) <- NULL
 
 final_long_NFRM <- final_tbl_NFRM %>%
@@ -383,14 +386,15 @@ final_long_NFRM <- final_tbl_NFRM %>%
          diff_bsl_minus_prps = bsl - prps) 
 final_long_NFRM
 
+
 ```
 
 
 
 ```{r}
 # 1) Prepare storage for each last_len
-all_crps <- vector("list", length(last_lens))
-names(all_crps) <- paste0("last_", last_lens)
+all_crps_NFRM <- vector("list", length(last_lens))
+names(all_crps_NFRM) <- paste0("last_", last_lens)
 
 # 2) Loop over each tail length
 for (li in seq_along(last_lens)) {
@@ -426,7 +430,7 @@ for (li in seq_along(last_lens)) {
   }
   
   # 5) Store results for this last_len
-  all_crps[[li]] <- data.frame(
+  all_crps_NFRM[[li]] <- data.frame(
     last_len  = L,
     n_weeks   = n_weeks,
     prps_CRPS = crps_prps,
@@ -436,7 +440,7 @@ for (li in seq_along(last_lens)) {
 }
 
 # 6) Combine and reshape for easy comparison
-final_crps_tbl_NFRM <- do.call(rbind, all_crps)
+final_crps_tbl_NFRM <- do.call(rbind, all_crps_NFRM)
 rownames(final_crps_tbl_NFRM) <- NULL
 # final_crps_long <- final_crps_tbl %>%
 #   pivot_longer(
