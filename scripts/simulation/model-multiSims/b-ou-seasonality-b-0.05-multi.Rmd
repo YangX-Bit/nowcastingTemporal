@@ -22,7 +22,7 @@ path_source_nowcasting <- file.path(dirname(path_proj), "nowcasting", "source")
 
 source(file.path(path_source_nowcasting, "simulation", "simulations_functions_final.R"))
 source(file.path(path_source_nowcasting, "functions", "prior_function.R"))
-post_draws_path = file.path(path_proj, "data", "posterior")
+post_draws_path = file.path(file.path(dirname(dirname(path_proj)),"projects","draws"))
 
 source(file.path(path_proj, "source", "functions", "simulation_functions.R"))
 
@@ -204,10 +204,11 @@ for (i in 1:num_sims) {
 ### Model fitting
 
 ```{r}
+tic("NFRS baseline model")
 #setting
-iter_sampling = 10000
-iter_warmup   = 2000
-chains        = 3
+iter_sampling = 5000
+iter_warmup   = 1000
+chains        = 2
 refresh       = 0
 thin          = 1
 
@@ -254,9 +255,11 @@ fit_bsl_NFRS     <- map(results_bsl_NFRS, "fit")
 varnames_bsl_NFRS <- map(results_bsl_NFRS, "varnames")
 N_bsl_NFRS  <- map(results_bsl_NFRS, "N")
 
+toc(log = TRUE) 
 ```
 
 ```{r}
+tic("NFRS proposed model")
 hypers = hypers_q(phi_ref = 0.1, D_ref = 25, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 
 # run everything
@@ -297,6 +300,8 @@ results_prps_NFRS <- pmap(param_tbl, function(n_weeks, run) {
 fit_prps_NFRS     <- map(results_prps_NFRS, "fit")
 varnames_prps_NFRS <- map(results_prps_NFRS, "varnames")
 N_prps_NFRS  <- map(results_prps_NFRS, "N")
+
+toc(log = TRUE) 
 ```
 
 ```{r}
@@ -360,10 +365,10 @@ for (li in seq_along(last_lens)) {
 }
 
 # 4) combine each last_len
-final_tbl <- do.call(rbind, all_results)
-row.names(final_tbl) <- NULL
+final_tbl_NFRS <- do.call(rbind, all_results)
+row.names(final_tbl_NFRS) <- NULL
 
-final_long <- final_tbl %>%
+final_long_NFRS <- final_tbl_NFRS %>%
   pivot_longer(
     cols      = -c(last_len, n_weeks),
     names_to  = c("model", "metric"),
@@ -376,7 +381,7 @@ final_long <- final_tbl %>%
   ) %>%
   mutate(across(c(prps, bsl), ~ round(.x, 2)),
          diff_bsl_minus_prps = bsl - prps) 
-final_long
+final_long_NFRS
 
 ```
 
@@ -431,8 +436,8 @@ for (li in seq_along(last_lens)) {
 }
 
 # 6) Combine and reshape for easy comparison
-final_crps_tbl <- do.call(rbind, all_crps)
-rownames(final_crps_tbl) <- NULL
+final_crps_tbl_NFRS <- do.call(rbind, all_crps)
+rownames(final_crps_tbl_NFRS) <- NULL
 # final_crps_long <- final_crps_tbl %>%
 #   pivot_longer(
 #     cols      = c(prps_CRPS, bsl_CRPS, diff_CRPS),
@@ -440,7 +445,7 @@ rownames(final_crps_tbl) <- NULL
 #     values_to = "CRPS"
 #   )
 
-print(final_crps_tbl)
+print(final_crps_tbl_NFRS)
 # print(final_crps_long)
 ```
 
