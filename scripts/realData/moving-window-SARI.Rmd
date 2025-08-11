@@ -1,0 +1,1033 @@
+---
+title: "MovingWindowSims"
+author: "Yang Xiao"
+date: "2024-11-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE)
+
+library(splines)
+library(ggplot2)
+library(reshape2)
+library(aweek)
+library(lubridate)
+library(latex2exp)
+
+#remotes::install_github("stan-dev/cmdstanr")
+library(cmdstanr)
+# cmdstanr::check_cmdstan_toolchain(fix = TRUE)
+# install_cmdstan(cores = 4, overwrite = TRUE)
+# set_cmdstan_path(path = "C:/Users/Administrator/.cmdstan/cmdstan-2.35.0")
+# cmdstan_version()
+```
+
+```{r}
+path_proj = here::here()
+path_source = file.path(path_proj, "source")
+
+# source
+source(file.path(path_source, "simulation", "simulations_functions_final.R"))
+
+# source from other paper
+source(file.path(path_source, "funcs_german_paper", "plotReportingTriangle.R"))
+source(file.path(path_source, "functions", "prior_function.R"))
+
+# data import
+SARI <- as.data.frame(read.csv(file.path(path_proj, "data", "raw", "clean_data_srag_epiweek_delay_table_PR.csv"),))
+
+# set week
+set_week_start("Sunday")
+SARI$date <- get_date(week = SARI$epiweek, year = SARI$epiyear)
+
+
+# mac
+# posterior_draws_path = file.path(Sys.getenv("HOME"), "Desktop", "draws", "SARI")
+posterior_draws_path = file.path(path_proj, "data", "draws", "SARI")
+
+#Windows
+#posterior_draws_path = file.path(Sys.getenv("USERPROFILE"), "Desktop", "draws", "realData", "SARI")
+
+```
+
+```{r}
+#models
+q_constant <- file.path(path_proj, "source", "models", "q-constant.stan")
+b_constant <- file.path(path_proj, "source", "models", "b-constant.stan")
+b_rw <- file.path(path_proj, "source", "models", "b-rw1.stan")
+b_ou <-  file.path(path_proj, "source", "models", "b-ou.stan")
+
+compiled_models <- list(
+  q_constant = cmdstan_model(q_constant),
+  b_constant = cmdstan_model(b_constant),
+  b_rw = cmdstan_model(b_rw),
+  b_ou = cmdstan_model(b_ou)
+)
+
+models_to_use <- c("q_constant", "b_constant", "b_rw", "b_ou")
+```
+
+```{r, warning=FALSE}
+source(file.path(path_source, "functions", "plot_function.R"))
+source(file.path(path_source, "functions", "fit_function.R"))
+source(file.path(path_source, "functions", "table_function.R"))
+
+# setting: delay,  number of days
+seed <- 123
+
+set.seed(seed)
+ D <- 26
+#D <- 15
+N_obs <- 200
+
+# try-on in region 41002
+data_41002 <- SARI %>% filter(regionalsaude == 41002) %>%
+  select(-c("epiweek","epiyear","regionalsaude")) %>%
+  relocate(Notifications, .after = last_col())
+rownames(data_41002) <- data_41002$date
+
+#transfer to cumu matrix
+data_41002[,c(1:(D+1))] <- cumulative_matrix(as.matrix(data_41002[,c(1:(D+1))]))
+data_41002_input <- as.matrix(data_41002[,c(1:(D+1))])
+
+# now <- as.Date("2024-02-01")
+scoreRange <- seq(as.Date("2009-07-05"),as.Date("2010-07-05"),by="56 day")
+
+# input the true case vector
+# case_true <- as.matrix(data_41002[, c("Notifications")])
+# rownames(case_true) <- as.character(data_41002$date)
+# case_true from the last col
+case_true <- as.matrix(data_41002[, c("Notifications")])
+rownames(case_true) <- as.character(data_41002$date)
+```
+
+```{r}
+data41002_exp_plot <- data_41002 %>% 
+  filter(date >= min(scoreRange) & date <= max(scoreRange)) %>%
+  select(-Notifications_within_26w, -Notifications, -date) %>%
+  as.matrix()
+
+page_num <- ceiling(nrow(data41002_exp_plot)/16)
+
+exp_plot <- fit_exp_plot(data41002_exp_plot,ncol = 4, nrow = 4, page = c(1:page_num), if_fit = T)
+
+exp_plot
+```
+
+
+
+
+```{r}
+exp_data <- data.frame( date = as.Date(rownames(data41002_exp_plot)),
+                        b = exp_plot$coefficients$b,
+                        phi = exp_plot$coefficients$phi
+                        )
+
+exp_b_plot <- ggplot(exp_data, aes(x = date, y = b)) +
+  geom_point(color = "black", size = 1.5) +       
+  geom_smooth(method = "loess", se = TRUE,        
+              color = "blue", fill = "grey", alpha = 0.5) +
+  theme_minimal() +
+  labs(x = NULL, y = "Y", title = "Smoothed Curve of parameter b")
+
+exp_phi_plot <- ggplot(exp_data, aes(x = date, y = phi)) +
+  geom_point(color = "black", size = 1.5) +       
+  geom_smooth(method = "loess", se = TRUE,        
+              color = "blue", fill = "grey", alpha = 0.5) +
+  theme_minimal() +
+  labs(x = NULL, y = "Y", title = "Smoothed Curve of parameter phi")
+
+exp_b_plot
+exp_phi_plot
+```
+
+
+```{r}
+# scoreRange_SARI <- seq(as.Date("2009-08-15"),as.Date("2009-12-30"),by="30 day")
+scoreRange_SARI <- seq(as.Date("2009-08-02"),as.Date("2009-11-22"), by = "4 week")
+scoreRange_SARI
+first_date <- as.Date("2009-06-14")
+
+hypers <- hypers_q(phi_ref = 0.2, D_ref = 26, type = "exponential", alpha_phi = 1.4, sd_log_b = 0.5, delay_seq = 0:26)
+
+# out_SARI <- nowcasting_moving_window(data_41002_input,  scoreRange = scoreRange_SARI, 
+#                                 case_true = case_true,
+#                                 start_date = first_date,
+#                                 D = D, 
+#                                 methods = models_to_use,
+#                                 compiled_models = compiled_models,
+#                                 iter_sampling = 10000, iter_warmup = 5000, refresh = 0,
+#                                 num_chains = 3, suppress_output = T,
+#                                 posterior_draws_path = posterior_draws_path, hypers = hypers)
+# save(out_SARI, file = file.path(path_proj, "data", "fitted_model","SARI_090802_to_901122_D=26.RData"))
+load( file.path(path_proj, "data", "fitted_model","SARI_090802_to_901122_D=26.RData"))
+#case_true - as.numeric(data_41002_input[,26])
+
+mat_y <- normalize_matrix_columns(data41002_exp_plot)
+last_reported <- as.matrix(data_41002[, c("Notifications_within_26w")])
+rownames(last_reported) <- as.character(data_41002$date)
+```
+
+
+
+```{r}
+
+results_SARI <- nowcasts_table(out_SARI, D = D, report_unit = "week", 
+                          methods = models_to_use)
+names(results_SARI) <- sapply(scoreRange_SARI, function(x) TeX(as.character(x), bold = TRUE))
+
+output <- bind_rows(results_SARI, .id = "time_point") |>
+  pivot_longer(
+    cols = mean_q_constant:upper_b_ou,
+    names_to = c(".value", "model"),
+    names_pattern = "([a-z]+)_(.+)"
+  ) |>
+  mutate(model = factor(model,
+    levels = c("q_constant", "b_constant", "b_rw", "b_ou"),
+    labels = c(
+      TeX("M1: Non-parametric $q_d$", bold = TRUE),
+      TeX("M2: Parametric $q(d)$", bold = TRUE),
+      TeX("M3: $q_t(d)$ with random walks", bold = TRUE),
+      TeX("M4: $q_t(d)$ with OU processes", bold = TRUE)))
+  )
+method_colors <- setNames(c("#008080", "#228B22", "#8446c6", "#4682B4", "gray40", "tomato"),
+  c(levels(output$model), "Current reported cases", "Eventual reported cases"))
+
+results_SARI_plots <- ggplot(output) +
+  geom_ribbon(aes(x = date, ymin = lower, ymax = upper, fill = model), alpha = 0.4, show.legend = FALSE) +
+  geom_line(aes(date, mean, color = model), linewidth = rel(0.4), show.legend = FALSE) +
+  geom_line(aes(date, case_reported, color = "Current reported cases"), linewidth = rel(0.4)) +
+  geom_point(aes(date, case_reported, color = "Current reported cases"), size = rel(0.5)) +
+  geom_line(aes(date, case_true, color = "Eventual reported cases"), linetype = 6) +
+  facet_grid(time_point ~ model, labeller = label_parsed, scales = "free") +
+  labs(fill = NULL, color = NULL, x = NULL, y = "Number of cases") +
+  theme_bw(9) +
+  theme(
+    legend.position = c(0.88, 0.94),
+    legend.key.height = unit(0.4, 'cm'),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  ) +
+  scale_fill_manual(values = method_colors[1:4]) +
+  scale_color_manual(values = method_colors, breaks = names(method_colors)[5:6])
+ggsave(filename = file.path(path_proj, "plots_to_show", "SARI", "results_SARI_plots_simple.png"),
+       plot = results_SARI_plots,
+       width = 8, height = 6, dpi = 300)
+
+
+
+
+  # Define model colors
+
+# c(
+#     "(M1) Non-parametric" =,  # green
+#     "b_constant" =,  # light yellow
+#     "b_rw"       =,  # purple
+#     "b_ou"       = # steel blue
+#   )
+
+# results_SARI_plots <- nowcasts_plot_separated(results_SARI, scoreRange_SARI, first_date,
+#                    report_unit = "week", D=26)
+# results_SARI_plots
+
+ggsave(filename = file.path(path_proj, "plots_to_show", "SARI", "results_SARI_plots_D=26.png"),
+       plot = results_SARI_plots,
+       width = 14, height = 8, dpi = 300)
+
+```
+
+```{r}
+# for(i in 1:length(results_SARI)){
+#   print(calculate_metrics(results_SARI[[i]], methods = models_to_use))
+# }
+model_names <- c("M1: Non-parametric $q_d$", 
+                 "M2: Parametric $q(d)$", 
+                 "M3: Time-varying $q_t(d)$ - RW", 
+                 "M4: Time-varying $q_t(d)$ - OU")
+
+list_sari_d26 <- list()
+for(i in 1:length(results_SARI)){
+  list_sari_d26[[i]] <- calculate_metrics(data.table::last(results_SARI[[i]],26),
+                          methods = models_to_use)
+}
+list_sari_d26
+highlight_metrics(list_sari_d26, model_names = model_names, 
+                  scenario_names = c("Initial","Increasing","Peak","Decreasing","Final"),
+                  D = D, first_date = first_date, date_labels = scoreRange_SARI,
+                  report_unit = "week",
+                  table_caption = "Metrics of Nowcast for SARI data (D = 26 weeks)",
+                  report_scenario = "SARI", model_origin = "app")
+
+
+```
+
+
+
+```{r}
+data_41002_ts_plot <-  data_41002 %>% 
+  filter(date >= min(scoreRange_SARI) & date <= max(scoreRange_SARI))
+
+# Assuming 'Date' is the time variable in 'data_41002_ts_plot'
+plot(data_41002_ts_plot$date, data_41002_ts_plot$Notifications, 
+     type = "l", col = "red", lwd = 2, 
+     xlab = "Date", ylab = "Cases", 
+     main = NULL)
+
+# Add the second line for 'd26' (Reported cases)
+lines(data_41002_ts_plot$date, data_41002_ts_plot$d26, 
+      col = "black", lwd = 2)
+
+# Add a legend in the top-right corner
+legend("topright", legend = c("Real cases", "Reported cases"), 
+       col = c("red", "black"), lwd = 2, bty = "n")
+
+
+```
+
+```{r}
+# Assuming 'Date' is the time variable in 'data_41002_ts_plot'
+plot(data_41002$date, data_41002$Notifications, 
+     type = "l", col = "red", lwd = 2, 
+     xlab = "Date", ylab = "Cases", 
+     main = "Number of SARI cases in a region in Paraná")
+```
+
+# ts plot for original data
+```{r}
+ts_SARI <- data.frame(cases = data_41002[,27],
+                      date = as.Date(rownames(data_41002)))
+
+ggplot(ts_SARI, aes(x = date, y = cases)) +
+  geom_line(color = "blue", size = 1) +  
+  geom_vline(xintercept = as.Date("2009-06-15"), linetype = "dashed", color = "red", size = 1) + 
+  geom_vline(xintercept = as.Date("2009-10-03"), linetype = "dashed", color = "red", size = 1) + 
+  labs(title = "SARI Cases Over Time", 
+       x = "Date", 
+       y = "Number of Cases") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),  # 
+    axis.title.x = element_text(size = 14, face = "bold"), 
+    axis.title.y = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12)
+  )
+```
+
+
+# emprical & fit plot
+```{r}
+
+x = c(0:26)
+y = data41002_exp_plot[which(rownames(data41002_exp_plot) == "2009-08-30"),]
+y_emp <- round(y/last_reported[which(rownames(last_reported) == "2009-08-30")],2)
+
+# Choose the day 2009-08-30
+data_fit <- data.frame(
+  x = x,
+  y = y,
+  y_emp = y_emp
+)
+
+
+nls_fit <- nls(y_emp ~ (1 - phi*exp(-b * x)), data = data_fit, start = list(b = 0.2, phi = 0.9))
+b_fit <- coef(nls_fit)["b"]; phi_fit <- coef(nls_fit)["phi"]
+y_fit <- round(1 - phi_fit * exp(-b_fit * x), 2)
+data_fit$y_fit <- y_fit
+
+library(patchwork)
+
+# empirical
+p1 <- ggplot(data_fit, aes(x = x)) +
+  geom_point(aes(y = y_emp), color = "darkblue", size = 2) +  # 
+  geom_line(aes(y = y_emp), color = "darkblue", size = 1) +   # 
+  geom_point(aes(y = y_fit), color = "red", size = 2, shape = 17) +  #
+  geom_line(aes(y = y_fit), color = "red", size = 1, linetype = "dashed") +  #
+  labs(title = NULL, 
+       y = "Cumulative Reporting Proportion", 
+       x = "Delay d (weeks)") +
+  scale_y_continuous(limits = c(0, 1)) +
+  theme_classic() +
+  theme(
+    axis.title.x = element_text(size = 18, face = "bold"), 
+    axis.title.y = element_text(size = 18, face = "bold"),
+    axis.text.x = element_text(size = 18),
+    axis.text.y = element_text(size = 18),
+    axis.text = element_text(size = 18)
+  )
+p1
+# fit
+
+
+# husO104
+# read data from other file
+x_husO104 = c(0:15)
+y_husO104 = as.numeric(husO104_exp_plot[which(rownames(husO104_exp_plot) == "2011-05-29"),])
+y_emp_husO104 <- round(y_husO104/case_true_husO104[which(rownames(case_true_husO104) ==  "2011-05-29")],2)
+# Choose the day 2009-08-30
+data_fit_husO104 <- data.frame(
+  x_husO104 = x_husO104,
+  y_husO104 = y_husO104,
+  y_emp_husO104 = y_emp_husO104
+)
+
+nls_fit_husO104 <- nls(y_emp_husO104 ~ (1 - phi*exp(-b * x_husO104)), data = data_fit_husO104, start = list(b = 0.2, phi = 0.9))
+b_fit_husO104 <- coef(nls_fit_husO104)["b"]; phi_fit_husO104 <- coef(nls_fit_husO104)["phi"]
+y_fit_husO104 <- round(1 - phi_fit_husO104 * exp(-b_fit_husO104 * x_husO104), 2)
+data_fit_husO104$y_fit_husO104 <- y_fit_husO104
+
+p2 <- ggplot(data_fit_husO104, aes(x = x_husO104)) +
+  geom_point(aes(y = y_emp_husO104), color = "darkblue", size = 2) +  # 
+  geom_line(aes(y = y_emp_husO104), color = "darkblue", size = 1) +   # 
+  geom_point(aes(y = y_fit_husO104), color = "red", size = 2, shape = 17) +  #
+  geom_line(aes(y = y_fit_husO104), color = "red", size = 1, linetype = "dashed") +  #
+  labs(title = NULL, 
+       y = NULL, 
+       x = "Delay d (weeks)") +
+  scale_y_continuous(limits = c(0, 1)) +
+  theme_classic() +
+  theme(
+    axis.title.x = element_text(size = 18, face = "bold"), 
+    axis.title.y = element_text(size = 18, face = "bold"),
+    axis.text.x = element_text(size = 18),
+    axis.text.y = element_text(size = 18),
+    axis.text = element_text(size = 18)
+  )
+p2
+
+# put together
+emp_fit_plots <- p1 + p2
+emp_fit_plots
+
+ggsave(filename = file.path(path_proj, "plots_to_show", "SARI", paste0("emp_fit.png")),
+       plot = emp_fit_plots,
+       width = 20, height = 8, dpi = 300)
+```
+
+# emp_change_overtime
+```{r}
+date_start <- as.Date("2009-08-02"); date_end <- as.Date("2009-09-20")
+
+data_41002_exp <- data_41002 %>% select(-Notifications, -date, -Notifications_within_26w) %>%
+  as.matrix()
+
+# date_start <- as.Date("2009-10-25"); date_end <- as.Date("2010-02-7")
+rows_use <- which(as.Date(rownames(data_41002_exp)) >= date_start &
+                  as.Date(rownames(data_41002_exp)) <= date_end)
+rows_use_case_true <- which(as.Date(rownames(last_reported)) >= date_start &
+                  as.Date(rownames(last_reported)) <= date_end)
+
+library(tidyr)
+library(dplyr)
+library(cowplot)
+
+data_matrix <- data_41002_exp[rows_use, ]
+case_true_emp_plot <- last_reported[rows_use_case_true]
+time_labels <- rownames(data_matrix)
+
+# convert to long data
+df <- round(as.data.frame(data_matrix)/case_true_emp_plot,2)
+df$Time <- time_labels  
+df <- df %>%
+  mutate(RowID = row_number()) %>%
+  pivot_longer(cols = starts_with("d"), names_to = "X", values_to = "Y") %>%
+  mutate(X = as.numeric(sub("d", "", X)))  
+
+myplot <- mutate(df, as.Date(Time)) |>
+    ggplot() +
+    geom_line(aes(X, Y), color = "gray30", linewidth = rel(0.4)) +
+    geom_point(aes(X, Y), color = "gray30", size = rel(0.5)) +
+    labs(x = TeX("Delay (weeks)"), y = TeX("Cumulative reported proportion")) +
+    facet_wrap(~ Time, scales = "free", nrow = 2) +
+    scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.25)) +
+    scale_x_continuous(limits = c(0, 26), breaks = seq(0, 26, by = 5)) +
+    # theme_bw(9) +
+    theme_classic(9) +
+    theme(
+        # legend.position = c(0.9, 0.15),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        panel.grid.major = element_line()
+    )
+
+ggsave(filename = file.path(path_proj, "plots_to_show", "SARI", paste0("qtd-empirical.png")),
+       plot = myplot,
+       width = 8, height = 4, dpi = 300)
+
+# plots <- df %>%
+#   group_by(RowID) %>%
+#   group_split() %>%
+#   lapply(function(d) {
+#     ggplot(d, aes(x = X, y = Y)) +
+#       # geom_line(color = "darkblue", size = 1) + 
+#       geom_line(color = "gray30", size = 1) + 
+#       scale_y_continuous(limits = c(0, 1), breaks = c(0,0.2,0.4,0.6,0.8,1)) +
+#       scale_x_continuous(limits = c(0, 26), breaks = seq(0, 26, by = 5)) +  # 
+#       labs(title =  unique(d$Time), x = NULL, y = NULL) +
+#       theme_minimal() +
+#       theme(
+#         plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),  # ⬅️ Title centered & bold
+#         axis.text.x = element_text(angle = 45, hjust = 1, size = 16),  
+#         axis.text.y = element_text(size = 16)
+#       )
+#   })
+#
+# # Combine subplots into a 4*4 grid
+# final_plot <- wrap_plots(plots, ncol = 4, nrow = 2) +  
+#   plot_annotation(
+#     title = NULL,
+#     theme = theme(
+#       plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),  
+#       plot.caption = element_text(hjust = 0.5, size = 10),
+#       plot.margin = margin(10, 10, 30, 50)  # Leave more margin to the left
+#     )
+#   ) &
+#   theme(
+#     axis.title.x = element_text(size = 16, face = "bold")
+#   )  + 
+#   labs(x = "Delay D", y = NULL)
+#
+# # Add left-side Y-axis title
+# emp_09_12_15_the_5th <- ggdraw(final_plot) +
+#   draw_label("Accumulated number of reported proportion", 
+#              x = 0.02, y = 0.53, angle = 90,  
+#              size = 14, fontface = "bold") +
+#   draw_label("Delay", 
+#              x = 0.53, y = 0.02, angle = 0,  # ⬅️ Horizontal placement
+#              size = 14, fontface = "bold")
+#   
+# ggsave(filename = file.path(path_proj, "plots_to_show", "SARI", paste0("empirical_plots.png")),
+#        plot = emp_09_12_15_the_5th,
+#        width = 14, height = 8, dpi = 300)
+
+myplot_FR_vs_NFR <- mutate(df, as.Date(Time)) |> filter(Time == "2009-08-02" | Time == "2009-09-06") |>
+    ggplot() +
+    geom_line(aes(X, Y), color = "gray30", linewidth = rel(0.4)) +
+    geom_vline(xintercept = 15, color = "tomato") +
+    geom_point(aes(X, Y), color = "gray30", size = rel(0.5)) +
+    labs(x = TeX("d"), y = TeX("q(d)")) +
+    facet_wrap(~ Time, scales = "free", nrow = 1) +
+    scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.25)) +
+    scale_x_continuous(limits = c(0, 26), breaks = seq(0, 26, by = 5)) +
+    # theme_bw(9) +
+    theme_classic(9) +
+    theme(
+        # legend.position = c(0.9, 0.15),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        panel.grid.major = element_line()
+    )
+ggsave(filename = file.path(path_proj, "plots_to_show", "SARI", paste0("qtd-empirical_FR_VS_NFR.png")),
+       plot = myplot_FR_vs_NFR,
+       width = 8, height = 4, dpi = 300)
+```
+
+
+# fit curve
+```{r}
+D=26
+scoreRange_SARI <- seq(as.Date("2009-08-02"),as.Date("2009-11-22"), by = "4 week")
+scoreRange_SARI
+first_date <- as.Date("2009-06-13")
+
+# Define the time lengths for T1 to T5
+time_lengths <- c(7, 11, 15, 19, 24)
+
+# Manually define the desired number of rows and columns for each T plot
+plot_rows <- c(3, 3, 3, 4, 4)
+plot_cols <- c(3, 4, 5, 5, 6)
+
+# Loop over T1 to T5
+for(t in 1:5) {
+  
+  T_length <- time_lengths[t]
+  
+  # Select the time period based on the current T using the corresponding scoreRange_SARI value
+  period_T <- which(as.Date(rownames(data_41002_input)) >= first_date &
+                      as.Date(rownames(data_41002_input)) <= scoreRange_SARI[t])
+  
+  # Compute the true curve (each row corresponds to a time point, columns for delay d = 0:26)
+  actual_curve <- round(data_41002_input[period_T, ] / last_reported[period_T, ], 2)
+  
+  # Define the x-axis for model curves: delay values from 0 to D
+  x <- 0:D
+  
+  ## Model curves calculations using the current T's model outputs:
+  # 1. q-Constant model
+  q_draws <- out_SARI$q_constant[[t]]$draws("q")
+  q_const_curves <- round(apply(as.array(q_draws), 3, mean), 2)
+  
+  # 2. b-Constant model
+  b_draws_constant <- out_SARI$b_constant[[t]]$draws("b")
+  b_means_constant <- apply(as.array(b_draws_constant), 3, mean)
+  phi_draws_constant <- out_SARI$b_constant[[t]]$draws("phi")
+  phi_means_constant <- apply(as.array(phi_draws_constant), 3, mean)
+  b_const_curves <- round(1 - phi_means_constant * exp(-b_means_constant * x), 2)
+  
+  # 3. b-Random walk model
+  b_draws_rw <- out_SARI$b_rw[[t]]$draws("b")
+  b_means_rw <- apply(as.array(b_draws_rw), 3, mean)
+  phi_draws_rw <- out_SARI$b_rw[[t]]$draws("phi")
+  phi_means_rw <- apply(as.array(phi_draws_rw), 3, mean)
+  b_rw_curves <- round(1 - phi_means_rw * exp(-b_means_rw %o% x), 2)
+  
+  # 4. b-OU process model
+  b_draws_ou <- out_SARI$b_ou[[t]]$draws("b")
+  b_means_ou <- apply(as.array(b_draws_ou), 3, mean)
+  phi_draws_ou <- out_SARI$b_ou[[t]]$draws("phi")
+  phi_means_ou <- apply(as.array(phi_draws_ou), 3, mean)
+  b_ou_curves <- round(1 - phi_means_ou * exp(-b_means_ou %o% x), 2)
+  
+  ## Construct the long-format dataframe for plotting
+  df_list <- list()
+  
+  for(i in seq_len(T_length)) {
+    
+    #  larger i, less d (less information when time is more recent)
+    d_max <- min(T_length - i , D)      #  i = T_length, d_max = 0; when i = 1, d_max = T_length - 1
+    x_actual <- 0:d_max        # 
+    
+    df_list[[ length(df_list) + 1 ]] <- data.frame(
+      time   = i,
+      d      = x_actual,
+      q      = actual_curve[i, 1:(d_max + 1)],   #
+      method = "Actual curve"
+    )
+    
+    # q-Constant: same curve for all time points
+    df_list[[ length(df_list) + 1 ]] <- data.frame(
+      time   = i,
+      d      = x,
+      q      = q_const_curves,
+      method = "q-Constant"
+    )
+    
+    # b-Constant: same curve for all time points
+    df_list[[ length(df_list) + 1 ]] <- data.frame(
+      time   = i,
+      d      = x,
+      q      = b_const_curves,
+      method = "b-Constant"
+    )
+    
+    # b-Random walk: distinct curve for each time point
+    df_list[[ length(df_list) + 1 ]] <- data.frame(
+      time   = i,
+      d      = x,
+      q      = b_rw_curves[i, ],
+      method = "b-Random walk"
+    )
+    
+    # b-OU process: distinct curve for each time point
+    df_list[[ length(df_list) + 1 ]] <- data.frame(
+      time   = i,
+      d      = x,
+      q      = b_ou_curves[i, ],
+      method = "b-OU process"
+    )
+  }
+  
+  # Combine all mini data frames into one long-format data frame
+  df_long <- dplyr::bind_rows(df_list)
+  
+  
+  # Set factor levels for 'method' to control legend order
+  df_long$method <- factor(df_long$method, levels = c(
+    "Actual curve",
+    "q-Constant",
+    "b-Constant",
+    "b-Random walk",
+    "b-OU process"
+  ))
+  
+  # Define colors for each method
+  method_colors <- c(
+    "q-Constant"     = "#008080",  # green
+    "b-Constant"     = "#228B22",  # orange
+    "b-Random walk"  = "#8446c6",  # purple
+    "b-OU process"   = "#4682B4",  # steel blue
+    "Actual curve"   = "gray40"     # actual data in black
+  )
+  total_length_t <- max(df_long$time)
+  
+  qtd_curves <- ggplot() +
+    # Actual curve
+    geom_line(data = subset(df_long, method == "Actual curve"),
+              aes(x = d, y = q, color = method), linewidth = rel(0.4)) +
+    geom_point(data = subset(df_long, method == "Actual curve"),
+               aes(x = d, y = q, color = method), size = rel(0.5)) +
+    # other lines
+    geom_line(data = subset(df_long, method != "Actual curve"),
+              aes(x = d, y = q, color = method), linewidth = rel(0.4)) +
+    facet_wrap(
+      ~ time, 
+      nrow = plot_rows[t], 
+      ncol = plot_cols[t],
+      labeller = labeller(time = function(x) {
+        # earliest date：scoreRange_SARI[t] - (time_lengths[t]-1)*7 天
+        date_range <- seq(from = scoreRange_SARI[t] - (time_lengths[t] - 1) * 7,
+                          by = 7,
+                          length.out = time_lengths[t])
+        sapply(as.integer(x), function(i) format(date_range[i], "%Y-%m-%d"))
+      })
+    ) +
+    scale_color_manual(values = method_colors,
+                       labels = c(
+                          "Actual curve", 
+                          TeX("Non-parametric $q_d$"),
+                          TeX("Parametric $q(d)$"),
+                          TeX("$q_t(d)$ with random walks"),
+                          TeX("$q_t(d)$ with OU processes")
+                        )) +
+    labs(
+      x = "Delay (weeks)",
+      y = "Cumulative reporting proportion/probability",
+      color = "Method"
+    ) +
+    theme_bw(base_size = 9) +
+    theme(
+      legend.position = "bottom",
+      legend.key.height = unit(0.4, 'cm'),
+      strip.background = element_blank(),
+      strip.text = element_text(face = "bold",size = 10),
+      panel.grid.minor = element_blank(),
+      axis.title = element_text(size = 10),
+      axis.text = element_text(size = 10),
+      legend.title = element_text(size = 10),
+      legend.text = element_text(size = 8)
+    )
+  
+  # Print the current plot
+  print(qtd_curves)
+  
+  ggsave(filename = file.path(path_proj, "plots_to_show", "SARI", paste0("qtd_fit_curve_SARI_T",t,".png")),
+         plot = qtd_curves,
+         width = 8, height = 6, dpi = 300)
+  # Optionally save the plot, for example:
+  # ggsave(paste0("plot_T", t, ".png"), p, width = 12, height = 6)
+}
+
+
+```
+
+
+# plot for each day emp
+```{r}
+date_start <- as.Date("2009-06-14")
+date_end <- as.Date("2009-11-22")
+# Uncomment the following line if you need an alternative date range
+# date_start <- as.Date("2009-10-25"); date_end <- as.Date("2010-02-07")
+
+# Select rows within the specified date range
+rows_use <- which(as.Date(rownames(data_41002_input)) >= date_start &
+                    as.Date(rownames(data_41002_input)) <= date_end)
+rows_use_case_true <- which(as.Date(rownames(last_reported)) >= date_start &
+                              as.Date(rownames(last_reported)) <= date_end)
+
+library(tidyr)
+library(dplyr)
+library(cowplot)
+library(ggplot2)
+library(patchwork)
+
+data_matrix <- data_41002_input[rows_use, ]
+case_true_emp_plot <- last_reported[rows_use_case_true]
+time_labels <- rownames(data_matrix)
+
+# Convert to long-format data:
+# 1. Compute the cumulative reporting proportion by dividing data_matrix by case_true_emp_plot.
+# 2. Create a 'Time' column from the row names.
+# 3. Add a sequential RowID.
+# 4. Pivot the delay columns (e.g., d1, d2, …) into long format.
+
+# df <- round(as.data.frame(data_matrix) / case_true_emp_plot, 2)
+df <- as.data.frame(data_matrix)
+df$Time <- time_labels  
+df <- df %>%
+  mutate(RowID = row_number()) %>%
+  pivot_longer(cols = starts_with("d"), names_to = "X", values_to = "Y") %>%
+  mutate(X = as.numeric(sub("d", "", X)))
+
+# For each reporting date, determine the number of available delay weeks.
+# The available delay is computed as: floor((date_end - ReportDate) / 7 + 1)
+# This ensures that for the latest date we only have 1 observation, for the day before we have 2, and so on.
+df <- df %>%
+  mutate(
+    ReportDate = as.Date(Time),
+    available_delay = floor(as.numeric(date_end - ReportDate) / 7 )
+  ) %>%
+  # Only keep delay weeks that have been observed (i.e. less than or equal to available_delay)
+  filter(X <= available_delay)
+
+myplot <- mutate(df, as.Date(Time)) |>
+    ggplot() +
+    geom_line(aes(X, Y), color = "gray30", linewidth = rel(0.4)) +
+    geom_point(aes(X, Y), color = "gray30", size = rel(0.5)) +
+    labs(x = TeX("Delay (weeks)"), y = TeX("Cumulative reported cases")) +
+    facet_wrap(~ Time, scales = "free", nrow = 4) +
+    scale_y_continuous(limits = c(0, NA)) +
+    scale_x_continuous(limits = c(0, 26), breaks = seq(0, 26, by = 5)) +
+    # theme_bw(9) +
+    theme_classic(9) +
+    theme(
+        # legend.position = c(0.9, 0.15),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        panel.grid.major = element_line()
+    )
+myplot
+
+ggsave(filename = file.path(path_proj, "plots_to_show", "SARI", paste0("emp_09_11_22.png")),
+       plot = myplot,
+       width = 8, height = 5, dpi = 300)
+
+
+# # Create subplots for each reporting date
+# plots <- df %>%
+#   group_by(RowID) %>%
+#   group_split() %>%
+#   lapply(function(d) {
+#     ggplot(d, aes(x = X, y = Y)) +
+#       geom_line(color = "gray30", size = 1) + 
+#       geom_point(color = "gray30", size = 1.4, alpha = 0.8, shape = 16) +
+#       scale_y_continuous(expand = c(0, 0)) +
+#       scale_x_continuous(limits = c(0, 26), breaks = seq(0, 26, by = 5)) +  # 
+#       labs(title =  unique(d$Time), x = NULL, y = NULL) +
+#       theme_minimal() +
+#       theme(
+#         plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+#         axis.text.x = element_text(angle = 45, hjust = 1, size = 16),  # 
+#         axis.text.y = element_text(size = 16)
+#       )
+#   })
+#
+# # Combine subplots into a 5*6 grid
+# final_plot <- wrap_plots(plots, ncol = 6, nrow = 4) +  
+#   plot_annotation(
+#     title = NULL,
+#     theme = theme(
+#       plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),  
+#       plot.caption = element_text(hjust = 0.5, size = 10),
+#       plot.margin = margin(10, 10, 30, 50)  # Leave more margin to the left
+#     )
+#   ) &
+#   theme(
+#     axis.title.x = element_text(size = 16, face = "bold")
+#   )  + 
+#   labs(x = "Delay D", y = NULL)
+#
+# # Add left-side Y-axis title
+# emp_09_12_15_the_5th <- ggdraw(final_plot) +
+#   draw_label("Number of reported cases", 
+#              x = 0.02, y = 0.5, angle = 90,  
+#              size = 14, fontface = "bold") +
+#   draw_label("Delay (weeks)", 
+#              x = 0.53, y = 0.02, angle = 0,  # ⬅ Horizontal placement
+#              size = 14, fontface = "bold")
+#
+# emp_09_12_15_the_5th
+#
+# ggsave(filename = file.path(path_proj, "plots_to_show", "SARI", paste0("emp_09_11_22_the_5th.png")),
+#        plot = emp_09_12_15_the_5th,
+#        width = 14, height = 10, dpi = 300)
+```
+
+```{r}
+# plot for the revision
+D=26
+scoreRange_SARI <- seq(as.Date("2009-08-02"),as.Date("2009-11-22"), by = "4 week")
+scoreRange_SARI
+first_date <- as.Date("2009-06-13")
+
+# Define the time lengths for T1 to T5
+time_lengths <- c(7, 11, 15, 19, 24)
+
+# Manually define the desired number of rows and columns for each T plot
+plot_rows <- c(3, 3, 3, 4, 4)
+plot_cols <- c(3, 4, 5, 5, 6)
+
+# Loop over T1 to T5
+for(t in 5:5) {
+  
+  T_length <- time_lengths[t]
+  
+  # Select the time period based on the current T using the corresponding scoreRange_SARI value
+  period_T <- which(as.Date(rownames(data_41002_input)) >= first_date &
+                      as.Date(rownames(data_41002_input)) <= scoreRange_SARI[t])
+  
+  # Compute the true curve (each row corresponds to a time point, columns for delay d = 0:26)
+  actual_curve <- round(data_41002_input[period_T, ] / last_reported[period_T, ], 2)
+  
+  # Define the x-axis for model curves: delay values from 0 to D
+  x <- 0:D
+  
+  ## Model curves calculations using the current T's model outputs:
+  # 1. q-Constant model
+  q_draws <- out_SARI$q_constant[[t]]$draws("q")
+  q_const_curves <- round(apply(as.array(q_draws), 3, mean), 2)
+  
+  # 2. b-Constant model
+  b_draws_constant <- out_SARI$b_constant[[t]]$draws("b")
+  b_means_constant <- apply(as.array(b_draws_constant), 3, mean)
+  phi_draws_constant <- out_SARI$b_constant[[t]]$draws("phi")
+  phi_means_constant <- apply(as.array(phi_draws_constant), 3, mean)
+  b_const_curves <- round(1 - phi_means_constant * exp(-b_means_constant * x), 2)
+  
+  # 3. b-Random walk model
+  b_draws_rw <- out_SARI$b_rw[[t]]$draws("b")
+  b_means_rw <- apply(as.array(b_draws_rw), 3, mean)
+  phi_draws_rw <- out_SARI$b_rw[[t]]$draws("phi")
+  phi_means_rw <- apply(as.array(phi_draws_rw), 3, mean)
+  b_rw_curves <- round(1 - phi_means_rw * exp(-b_means_rw %o% x), 2)
+  
+  # 4. b-OU process model
+  b_draws_ou <- out_SARI$b_ou[[t]]$draws("b")
+  b_means_ou <- apply(as.array(b_draws_ou), 3, mean)
+  phi_draws_ou <- out_SARI$b_ou[[t]]$draws("phi")
+  phi_means_ou <- apply(as.array(phi_draws_ou), 3, mean)
+  b_ou_curves <- round(1 - phi_means_ou * exp(-b_means_ou %o% x), 2)
+  
+  ## Construct the long-format dataframe for plotting
+  df_list <- list()
+  
+  for(i in seq_len(T_length)) {
+    
+    #  larger i, less d (less information when time is more recent)
+    d_max <- min(T_length - i , D)      #  i = T_length, d_max = 0; when i = 1, d_max = T_length - 1
+    x_actual  <- x[x <= d_max]
+    x_unknown <- x[x >= d_max]
+    
+    # known
+    df_list[[length(df_list) + 1]] <- data.frame(
+      time   = i,
+      d      = x_actual,
+      q      = actual_curve[i, 1:(d_max + 1)],   # 对应 delay 0..d_max
+      method = "Actual curve"
+    )
+    
+    # unknown
+    df_list[[length(df_list) + 1]] <- data.frame(
+      time   = i,
+      d      = x_unknown,
+      q      = actual_curve[i, (d_max + 1):ncol(actual_curve)],   # 对应 delay (d_max+1) 以后
+      method = "Actual curve (Unknown yet)"
+    )
+    
+    # q-Constant: same curve for all time points
+    df_list[[ length(df_list) + 1 ]] <- data.frame(
+      time   = i,
+      d      = x,
+      q      = q_const_curves,
+      method = "q-Constant"
+    )
+    
+    # b-Constant: same curve for all time points
+    df_list[[ length(df_list) + 1 ]] <- data.frame(
+      time   = i,
+      d      = x,
+      q      = b_const_curves,
+      method = "b-Constant"
+    )
+    
+    # b-Random walk: distinct curve for each time point
+    df_list[[ length(df_list) + 1 ]] <- data.frame(
+      time   = i,
+      d      = x,
+      q      = b_rw_curves[i, ],
+      method = "b-Random walk"
+    )
+    
+    # b-OU process: distinct curve for each time point
+    df_list[[ length(df_list) + 1 ]] <- data.frame(
+      time   = i,
+      d      = x,
+      q      = b_ou_curves[i, ],
+      method = "b-OU process"
+    )
+  }
+  
+  # Combine all mini data frames into one long-format data frame
+  df_long <- dplyr::bind_rows(df_list)
+  
+  
+  # Set factor levels for 'method' to control legend order
+  df_long$method <- factor(df_long$method, levels = c(
+    "Actual curve",
+    "Actual curve (Unknown yet)",
+    "q-Constant",
+    "b-Constant",
+    "b-Random walk",
+    "b-OU process"
+  ))
+  
+  # Define colors for each method
+  method_colors <- c(
+    "q-Constant"     = "#008080",  # green
+    "b-Constant"     = "#228B22",  # orange
+    "b-Random walk"  = "#8446c6",  # purple
+    "b-OU process"   = "#4682B4",  # steel blue
+    "Actual curve"   = "gray40",     # actual data in black
+    "Actual curve (Unknown yet)" = "red"
+  )
+  total_length_t <- max(df_long$time)
+  
+  qtd_curves <- ggplot() +
+    # Actual curve
+    geom_line(data = subset(df_long, method == "Actual curve"),
+              aes(x = d, y = q, color = method), linewidth = rel(0.4)) +
+    geom_point(data = subset(df_long, method == "Actual curve"),
+               aes(x = d, y = q, color = method), size = rel(0.5)) +
+    # other lines
+    geom_line(data = subset(df_long, method != "Actual curve"),
+              aes(x = d, y = q, color = method), linewidth = rel(0.4)) +
+    facet_wrap(
+      ~ time, 
+      nrow = plot_rows[t], 
+      ncol = plot_cols[t],
+      labeller = labeller(time = function(x) {
+        # earliest date：scoreRange_SARI[t] - (time_lengths[t]-1)*7 天
+        date_range <- seq(from = scoreRange_SARI[t] - (time_lengths[t] - 1) * 7,
+                          by = 7,
+                          length.out = time_lengths[t])
+        sapply(as.integer(x), function(i) format(date_range[i], "%Y-%m-%d"))
+      })
+    ) +
+    scale_color_manual(values = method_colors,
+                       labels = c(
+                         "Actual curve", 
+                         "Actual curve (Unknown yet)",
+                         TeX("Non-parametric $q_d$"),
+                         TeX("Parametric $q(d)$"),
+                         TeX("$q_t(d)$ with random walks"),
+                         TeX("$q_t(d)$ with OU processes")
+                       )) +
+    labs(
+      x = "Delay (weeks)",
+      y = "Cumulative reporting proportion/probability",
+      color = "Method"
+    ) +
+    theme_bw(base_size = 9) +
+    theme(
+      legend.position = "bottom",
+      legend.key.height = unit(0.4, 'cm'),
+      strip.background = element_blank(),
+      strip.text = element_text(face = "bold",size = 10),
+      panel.grid.minor = element_blank(),
+      axis.title = element_text(size = 10),
+      axis.text = element_text(size = 10),
+      legend.title = element_text(size = 10),
+      legend.text = element_text(size = 8)
+    )
+  
+  # Print the current plot
+  print(qtd_curves)
+  
+  ggsave(filename = file.path(path_proj, "plots_to_show", "SARI", paste0("qtd_fit_curve_SARI_T",t,"_full_actual.png")),
+         plot = qtd_curves,
+         width = 8, height = 6, dpi = 300)
+  # Optionally save the plot, for example:
+  # ggsave(paste0("plot_T", t, ".png"), p, width = 12, height = 6)
+}
+```
+

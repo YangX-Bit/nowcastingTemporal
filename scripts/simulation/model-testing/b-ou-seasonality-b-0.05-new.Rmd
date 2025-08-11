@@ -210,7 +210,7 @@ matplot(t(b_ou_NFR$q), type = "l", lty = 1, ylim = c(0, 1))
 ### Model fitting
 
 ```{r}
-ind = 52
+ind = c(52,104,134)
 varnames_NFR <- list()
 vanilla_NFR <- list()
 test_NFR <- list()
@@ -297,7 +297,7 @@ mean_withGT_NFR_combined_last
 ```
 
 ```{r}
-test_num <- 1
+test_num <- 3
 
 # GT
 y_true_NFR <- b_ou_NFR$case_true[1:ind[test_num]]
@@ -443,13 +443,6 @@ param_true = tibble(
     x = s_t[1:ind[test_num]]
 )
 mcmc_areas(test_GT_NFR[[test_num]]$draws("season"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
-
-param_true = tibble(
-    parameter = grep("^beta_s\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
-    x = beta_s
-)
-mcmc_areas(test_GT_NFR[[test_num]]$draws("beta_s"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(

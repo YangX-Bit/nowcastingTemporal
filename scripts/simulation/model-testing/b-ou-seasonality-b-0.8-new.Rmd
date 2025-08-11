@@ -117,8 +117,7 @@ fourier_basis <- do.call(cbind, fourier_list)
 colnames(fourier_basis) <- unlist(lapply(1:H_max, function(h) {
   c(paste0("cos_h", h), paste0("sin_h", h))
 }))
-#fourier_basis_scaled <- scale(fourier_basis, center = FALSE, scale = apply(fourier_basis, 2, sd))
-
+ 
 # --- coefficient beta_s for seasonality---------------------------------
 set.seed(3)
 H_used <- 5

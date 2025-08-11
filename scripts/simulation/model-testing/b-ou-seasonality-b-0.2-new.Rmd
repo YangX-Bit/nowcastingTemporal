@@ -183,8 +183,8 @@ D <- 15
 ### Simulation
 
 ```{r}
-# ou_NFR
-params_b_ou_NFR <- list(
+# ou_NFRM
+params_b_ou_NFRM <- list(
   data = list(
     lambda = lambda,
     T       = T_len,
@@ -198,287 +198,281 @@ params_b_ou_NFR <- list(
   )
 )
 
-b_ou_NFR <- simulateData(params_b_ou_NFR)
+b_ou_NFRM <- simulateData(params_b_ou_NFRM)
 par(mfrow = c(2, 1))
-plot(b_ou_NFR$b, pch = 19, type = "b")
-plot(b_ou_NFR$phi, pch = 19, type = "b")
+plot(b_ou_NFRM$b, pch = 19, type = "b")
+plot(b_ou_NFRM$phi, pch = 19, type = "b")
 
 par(mfrow = c(1, 1))
-matplot(t(b_ou_NFR$q), type = "l", lty = 1, ylim = c(0, 1))
+matplot(t(b_ou_NFRM$q), type = "l", lty = 1, ylim = c(0, 1))
 
 ```
 
 ### Model fitting
 
 ```{r}
-ind = 52
-varnames_NFR <- list()
-vanilla_NFR <- list()
-test_NFR <- list()
+ind = c(52,104,134)
+varnames_NFRM <- list()
+vanilla_NFRM <- list()
+test_NFRM <- list()
 hypers = hypers_q(phi_ref = 0.1, D_ref = 25, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 for (i in 1:length(ind)) {
   print(paste0("The ",i,"th simulation."))
-  stan_data <- c(list(T = ind[i], D = D, Y = b_ou_NFR$case_reported_cumulated[1:ind[i], ]), hypers)
-  test_NFR[[i]] = model$sample(
+  stan_data <- c(list(T = ind[i], D = D, Y = b_ou_NFRM$case_reported_cumulated[1:ind[i], ]), hypers)
+  test_NFRM[[i]] = model$sample(
     data = stan_data,
     iter_sampling = 3000,
     iter_warmup = 2000,
     chains = 1,
     refresh = 0,
     thin = 1)
-  varnames_NFR[[i]] <- test_NFR[[i]]$summary()$variable
-  vanilla_NFR[[i]] <- test_NFR[[i]]$summary(variables = "N")$mean
+  varnames_NFRM[[i]] <- test_NFRM[[i]]$summary()$variable
+  vanilla_NFRM[[i]] <- test_NFRM[[i]]$summary(variables = "N")$mean
 }
 
 ```
 
 ```{r}
-varnames_GT_NFR <- list()
-withGT_NFR <- list()
-test_GT_NFR <- list()
+varnames_GT_NFRM <- list()
+withGT_NFRM <- list()
+test_GT_NFRM <- list()
 hypers = hypers_q(phi_ref = 0.1, D_ref = 25, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 for (i in 1:length(ind)) {
   print(paste0("The ",i,"th simulation."))
-  stan_data_GT_NFR <- c(list(T = ind[i], D = D, Y = b_ou_NFR$case_reported_cumulated[1:ind[i], ]), hypers, 
+  stan_data_GT_NFRM <- c(list(T = ind[i], D = D, Y = b_ou_NFRM$case_reported_cumulated[1:ind[i], ]), hypers, 
                list(K = ncol(matrix(x_t)), x = as.matrix(matrix(x_t)[1:ind[i], 1]),
                     S = H_used*2, #ncol(fourier_basis_scaled), 
                     bases_s = fourier_basis[(1:ind[i]),1:(H_used*2)],
                     E = 1000
                     ))
-test_GT_NFR[[i]] = model_GT$sample(
-    data = stan_data_GT_NFR,
+test_GT_NFRM[[i]] = model_GT$sample(
+    data = stan_data_GT_NFRM,
     iter_sampling = 3000,
     iter_warmup = 2000,
     chains = 1,
     refresh = 500,
     thin = 1)
-  varnames_GT_NFR[[i]] <- test_GT_NFR[[i]]$summary()$variable
-  withGT_NFR[[i]] <- test_GT_NFR[[i]]$summary(variables = "N")$mean
+  varnames_GT_NFRM[[i]] <- test_GT_NFRM[[i]]$summary()$variable
+  withGT_NFRM[[i]] <- test_GT_NFRM[[i]]$summary(variables = "N")$mean
 }
 
 
 ```
 
 ```{r}
-vanilla_NFR_combined <- list()
-withGT_NFR_combined <- list()
+vanilla_NFRM_combined <- list()
+withGT_NFRM_combined <- list()
 for (i in 1:(length(ind))) {
     print(paste0("The ",i,"th simulation."))
-  print(error_metrics(vanilla_NFR[[i]], b_ou_NFR$case_true[1:ind[i]]))
-  print(error_metrics(withGT_NFR[[i]], b_ou_NFR$case_true[1:ind[i]]))
-  vanilla_NFR_combined[[i]] <- as.data.frame(error_metrics(vanilla_NFR[[i]], b_ou_NFR$case_true[1:ind[i]]))
-  withGT_NFR_combined[[i]] <- as.data.frame(error_metrics(withGT_NFR[[i]], b_ou_NFR$case_true[1:ind[i]]))
+  print(error_metrics(vanilla_NFRM[[i]], b_ou_NFRM$case_true[1:ind[i]]))
+  print(error_metrics(withGT_NFRM[[i]], b_ou_NFRM$case_true[1:ind[i]]))
+  vanilla_NFRM_combined[[i]] <- as.data.frame(error_metrics(vanilla_NFRM[[i]], b_ou_NFRM$case_true[1:ind[i]]))
+  withGT_NFRM_combined[[i]] <- as.data.frame(error_metrics(withGT_NFRM[[i]], b_ou_NFRM$case_true[1:ind[i]]))
 }
 
-mean_vanilla_NFR_combined <- Reduce(`+`, vanilla_NFR_combined) / length(vanilla_NFR_combined)
-mean_withGT_NFR_combined <- Reduce(`+`, withGT_NFR_combined) / length(withGT_NFR_combined)
+mean_vanilla_NFRM_combined <- Reduce(`+`, vanilla_NFRM_combined) / length(vanilla_NFRM_combined)
+mean_withGT_NFRM_combined <- Reduce(`+`, withGT_NFRM_combined) / length(withGT_NFRM_combined)
 
-mean_vanilla_NFR_combined
-mean_withGT_NFR_combined
+mean_vanilla_NFRM_combined
+mean_withGT_NFRM_combined
 ```
 
 ```{r}
 # last 3 weeks
-vanilla_NFR_combined_last <- list()
-withGT_NFR_combined_last <- list()
+vanilla_NFRM_combined_last <- list()
+withGT_NFRM_combined_last <- list()
 last_len <- 3
 for (i in 1:(length(ind))) {
     print(paste0("The ",i,"th simulation."))
-  print(error_metrics(tail(vanilla_NFR[[i]],last_len), tail(b_ou_NFR$case_true[1:ind[i]],last_len)))
-  print(error_metrics(tail(withGT_NFR[[i]],last_len), tail(b_ou_NFR$case_true[1:ind[i]],last_len)))
-  vanilla_NFR_combined_last[[i]] <- as.data.frame(error_metrics(tail(vanilla_NFR[[i]],last_len), tail(b_ou_NFR$case_true[1:ind[i]],last_len)))
-  withGT_NFR_combined_last[[i]] <- as.data.frame(error_metrics(tail(withGT_NFR[[i]],last_len), tail(b_ou_NFR$case_true[1:ind[i]],last_len)))
+  print(error_metrics(tail(vanilla_NFRM[[i]],last_len), tail(b_ou_NFRM$case_true[1:ind[i]],last_len)))
+  print(error_metrics(tail(withGT_NFRM[[i]],last_len), tail(b_ou_NFRM$case_true[1:ind[i]],last_len)))
+  vanilla_NFRM_combined_last[[i]] <- as.data.frame(error_metrics(tail(vanilla_NFRM[[i]],last_len), tail(b_ou_NFRM$case_true[1:ind[i]],last_len)))
+  withGT_NFRM_combined_last[[i]] <- as.data.frame(error_metrics(tail(withGT_NFRM[[i]],last_len), tail(b_ou_NFRM$case_true[1:ind[i]],last_len)))
 }
 
-mean_vanilla_NFR_combined_last <- Reduce(`+`, vanilla_NFR_combined_last) / length(vanilla_NFR_combined_last)
-mean_withGT_NFR_combined_last <- Reduce(`+`, withGT_NFR_combined_last) / length(withGT_NFR_combined_last)
+mean_vanilla_NFRM_combined_last <- Reduce(`+`, vanilla_NFRM_combined_last) / length(vanilla_NFRM_combined_last)
+mean_withGT_NFRM_combined_last <- Reduce(`+`, withGT_NFRM_combined_last) / length(withGT_NFRM_combined_last)
 
-mean_vanilla_NFR_combined_last
-mean_withGT_NFR_combined_last
+mean_vanilla_NFRM_combined_last
+mean_withGT_NFRM_combined_last
 ```
 
 ```{r}
-test_num <- 1
+test_num <- 3
 
 # GT
-y_true_NFR <- b_ou_NFR$case_true[1:ind[test_num]]
+y_true_NFRM <- b_ou_NFRM$case_true[1:ind[test_num]]
 
-y_rep_mat_NFR <- test_NFR[[test_num]]$draws(variables = "N", format = "draws_matrix")
-pred_mat_NFR <- t(y_rep_mat_NFR)
+y_rep_mat_NFRM <- test_NFRM[[test_num]]$draws(variables = "N", format = "draws_matrix")
+pred_mat_NFRM <- t(y_rep_mat_NFRM)
 
-crps_vec_NFR  <- crps_sample(y   = y_true_NFR,  
-                         dat = pred_mat_NFR)
-mean_crps_NFR <- mean(crps_vec_NFR)
+crps_vec_NFRM  <- crps_sample(y   = y_true_NFRM,  
+                         dat = pred_mat_NFRM)
+mean_crps_NFRM <- mean(crps_vec_NFRM)
 
 #
-y_rep_mat_GT_NFR <- test_GT_NFR[[test_num]]$draws(variables = "N", format = "draws_matrix")
-pred_mat_GT_NFR <- t(y_rep_mat_GT_NFR)
+y_rep_mat_GT_NFRM <- test_GT_NFRM[[test_num]]$draws(variables = "N", format = "draws_matrix")
+pred_mat_GT_NFRM <- t(y_rep_mat_GT_NFRM)
 
-crps_vec_GT_NFR  <- crps_sample(y   = y_true_NFR,  
-                         dat = pred_mat_GT_NFR)
-mean_crps_GT_NFR <- mean(crps_vec_GT_NFR)
+crps_vec_GT_NFRM  <- crps_sample(y   = y_true_NFRM,  
+                         dat = pred_mat_GT_NFRM)
+mean_crps_GT_NFRM <- mean(crps_vec_GT_NFRM)
 
-mean_crps_NFR
-mean_crps_GT_NFR
+mean_crps_NFRM
+mean_crps_GT_NFRM
 ```
 
 ```{r}
 
 
 # GT
-y_true_NFR_l <- tail(b_ou_NFR$case_true[1:ind[test_num]], last_len)
+y_true_NFRM_l <- tail(b_ou_NFRM$case_true[1:ind[test_num]], last_len)
 
-y_rep_mat_NFR <- test_NFR[[test_num]]$draws(variables = "N", format = "draws_matrix")
-pred_mat_NFR_l <- tail(t(y_rep_mat_NFR), last_len)
+y_rep_mat_NFRM <- test_NFRM[[test_num]]$draws(variables = "N", format = "draws_matrix")
+pred_mat_NFRM_l <- tail(t(y_rep_mat_NFRM), last_len)
 
-crps_vec_NFR_l  <- crps_sample(y   = y_true_NFR_l,  
-                         dat = pred_mat_NFR_l)
-mean_crps_NFR_l <- mean(crps_vec_NFR_l)
+crps_vec_NFRM_l  <- crps_sample(y   = y_true_NFRM_l,  
+                         dat = pred_mat_NFRM_l)
+mean_crps_NFRM_l <- mean(crps_vec_NFRM_l)
 
 #
-y_rep_mat_GT_NFR <- test_GT_NFR[[test_num]]$draws(variables = "N", format = "draws_matrix")
-pred_mat_GT_NFR_l <- tail(t(y_rep_mat_GT_NFR), last_len) 
+y_rep_mat_GT_NFRM <- test_GT_NFRM[[test_num]]$draws(variables = "N", format = "draws_matrix")
+pred_mat_GT_NFRM_l <- tail(t(y_rep_mat_GT_NFRM), last_len) 
 
-crps_vec_GT_NFR_l  <- crps_sample(y   = y_true_NFR_l,  
-                         dat = pred_mat_GT_NFR_l)
-mean_crps_GT_NFR_l <- mean(crps_vec_GT_NFR_l)
+crps_vec_GT_NFRM_l  <- crps_sample(y   = y_true_NFRM_l,  
+                         dat = pred_mat_GT_NFRM_l)
+mean_crps_GT_NFRM_l <- mean(crps_vec_GT_NFRM_l)
 
-mean_crps_NFR_l
-mean_crps_GT_NFR_l
+mean_crps_NFRM_l
+mean_crps_GT_NFRM_l
 ```
 
 
 ```{r}
-mcmc_areas(test_NFR[[test_num]]$draws("sigma_log_b"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_NFR[[test_num]]$draws("sigma_logit_phi"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_NFR[[test_num]]$draws("theta_log_b"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_NFR[[test_num]]$draws("theta_logit_phi"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_NFRM[[test_num]]$draws("sigma_log_b"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_NFRM[[test_num]]$draws("sigma_logit_phi"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_NFRM[[test_num]]$draws("theta_log_b"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_NFRM[[test_num]]$draws("theta_logit_phi"), prob = 0.95, prob_outer = 0.95)
 
-mcmc_areas(test_NFR[[test_num]]$draws("mu_log_b"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_NFR[[test_num]]$draws("mu_logit_phi"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_NFRM[[test_num]]$draws("mu_log_b"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_NFRM[[test_num]]$draws("mu_logit_phi"), prob = 0.95, prob_outer = 0.95)
 
 
 param_true = tibble(
-    parameter = grep("^b\\[.+\\]$", varnames_NFR[[test_num]], value = TRUE),
-    x = b_ou_NFR$b[1:ind[test_num]]
+    parameter = grep("^b\\[.+\\]$", varnames_NFRM[[test_num]], value = TRUE),
+    x = b_ou_NFRM$b[1:ind[test_num]]
 )
-mcmc_areas(test_NFR[[test_num]]$draws("b"), prob_outer = 0.95) +
+mcmc_areas(test_NFRM[[test_num]]$draws("b"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^phi\\[.+\\]$", varnames_NFR[[test_num]], value = TRUE),
-    x =  b_ou_NFR$phi[1:ind[test_num]]
+    parameter = grep("^phi\\[.+\\]$", varnames_NFRM[[test_num]], value = TRUE),
+    x =  b_ou_NFRM$phi[1:ind[test_num]]
 )
-mcmc_areas(test_NFR[[test_num]]$draws("phi"), prob_outer = 0.95) +
+mcmc_areas(test_NFRM[[test_num]]$draws("phi"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^q\\[10,.+\\]$", varnames_NFR[[test_num]], value = TRUE),
-    x = b_ou_NFR$q[10,]
+    parameter = grep("^q\\[10,.+\\]$", varnames_NFRM[[test_num]], value = TRUE),
+    x = b_ou_NFRM$q[10,]
 )
-mcmc_areas(test_NFR[[test_num]]$draws(grep("^q\\[10,.+\\]$", varnames_NFR[[test_num]], value = TRUE)), prob_outer = 0.95) +
+mcmc_areas(test_NFRM[[test_num]]$draws(grep("^q\\[10,.+\\]$", varnames_NFRM[[test_num]], value = TRUE)), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^lambda\\[.+\\]$", varnames_NFR[[test_num]], value = TRUE),
-    x = b_ou_NFR$lambda[1:ind[test_num]]
+    parameter = grep("^lambda\\[.+\\]$", varnames_NFRM[[test_num]], value = TRUE),
+    x = b_ou_NFRM$lambda[1:ind[test_num]]
 )
-mcmc_areas(test_NFR[[test_num]]$draws("lambda"), prob_outer = 0.95) +
+mcmc_areas(test_NFRM[[test_num]]$draws("lambda"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^N\\[.+\\]$", varnames_NFR[[test_num]], value = TRUE),
-    x = b_ou_NFR$case_true[1:ind[test_num], 1]
+    parameter = grep("^N\\[.+\\]$", varnames_NFRM[[test_num]], value = TRUE),
+    x = b_ou_NFRM$case_true[1:ind[test_num], 1]
 )
-mcmc_areas(test_NFR[[test_num]]$draws("N"), prob_outer = 0.95) +
+mcmc_areas(test_NFRM[[test_num]]$draws("N"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 ```
 
 ```{r}
-mcmc_areas(test_GT_NFR[[test_num]]$draws("sigma_log_b"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_GT_NFR[[test_num]]$draws("sigma_logit_phi"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_GT_NFR[[test_num]]$draws("theta_log_b"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_GT_NFR[[test_num]]$draws("theta_logit_phi"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("sigma_log_b"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("sigma_logit_phi"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("theta_log_b"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("theta_logit_phi"), prob = 0.95, prob_outer = 0.95)
 
-mcmc_areas(test_GT_NFR[[test_num]]$draws("mu_log_b"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_GT_NFR[[test_num]]$draws("mu_logit_phi"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("mu_log_b"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("mu_logit_phi"), prob = 0.95, prob_outer = 0.95)
 
-mcmc_areas(test_GT_NFR[[test_num]]$draws("sigma_epsilon"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("sigma_epsilon"), prob = 0.95, prob_outer = 0.95)
 
-mcmc_areas(test_GT_NFR[[test_num]]$draws("beta0"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_GT_NFR[[test_num]]$draws("beta_x"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("beta0"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("beta_x"), prob = 0.95, prob_outer = 0.95)
 
-mcmc_areas(test_GT_NFR[[test_num]]$draws("rho_w"), prob = 0.95, prob_outer = 0.95)
-mcmc_areas(test_GT_NFR[[test_num]]$draws("sigma_w"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("rho_w"), prob = 0.95, prob_outer = 0.95)
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("sigma_w"), prob = 0.95, prob_outer = 0.95)
 
 param_true = tibble(
-    parameter = grep("^b\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
-    x = b_ou_NFR$b[1:ind[test_num]]
+    parameter = grep("^b\\[.+\\]$", varnames_GT_NFRM[[test_num]], value = TRUE),
+    x = b_ou_NFRM$b[1:ind[test_num]]
 )
-mcmc_areas(test_GT_NFR[[test_num]]$draws("b"), prob_outer = 0.95) +
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("b"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^phi\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
-    x =  b_ou_NFR$phi[1:ind[test_num]]
+    parameter = grep("^phi\\[.+\\]$", varnames_GT_NFRM[[test_num]], value = TRUE),
+    x =  b_ou_NFRM$phi[1:ind[test_num]]
 )
-mcmc_areas(test_GT_NFR[[test_num]]$draws("phi"), prob_outer = 0.95) +
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("phi"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^q\\[10,.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
-    x = b_ou_NFR$q[10,]
+    parameter = grep("^q\\[10,.+\\]$", varnames_GT_NFRM[[test_num]], value = TRUE),
+    x = b_ou_NFRM$q[10,]
 )
-mcmc_areas(test_GT_NFR[[test_num]]$draws(grep("^q\\[10,.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE)), prob_outer = 0.95) +
+mcmc_areas(test_GT_NFRM[[test_num]]$draws(grep("^q\\[10,.+\\]$", varnames_GT_NFRM[[test_num]], value = TRUE)), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^beta_s\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+    parameter = grep("^beta_s\\[.+\\]$", varnames_GT_NFRM[[test_num]], value = TRUE),
     x = beta_s
 )
-mcmc_areas(test_GT_NFR[[test_num]]$draws("beta_s"), prob_outer = 0.95) +
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("beta_s"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^season\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+    parameter = grep("^season\\[.+\\]$", varnames_GT_NFRM[[test_num]], value = TRUE),
     x = s_t[1:ind[test_num]]
 )
-mcmc_areas(test_GT_NFR[[test_num]]$draws("season"), prob_outer = 0.95) +
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("season"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
-param_true = tibble(
-    parameter = grep("^beta_s\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
-    x = beta_s
-)
-mcmc_areas(test_GT_NFR[[test_num]]$draws("beta_s"), prob_outer = 0.95) +
-    geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^w\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+    parameter = grep("^w\\[.+\\]$", varnames_GT_NFRM[[test_num]], value = TRUE),
     x = w_t[1:ind[test_num]]
 )
-mcmc_areas(test_GT_NFR[[test_num]]$draws("w"), prob_outer = 0.95) +
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("w"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^epsilon\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+    parameter = grep("^epsilon\\[.+\\]$", varnames_GT_NFRM[[test_num]], value = TRUE),
     x = epsilon_t[1:ind[test_num]]
 )
-mcmc_areas(test_GT_NFR[[test_num]]$draws("epsilon"), prob_outer = 0.95) +
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("epsilon"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^lambda\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
-    x = b_ou_NFR$lambda[1:ind[test_num]]
+    parameter = grep("^lambda\\[.+\\]$", varnames_GT_NFRM[[test_num]], value = TRUE),
+    x = b_ou_NFRM$lambda[1:ind[test_num]]
 )
-mcmc_areas(test_GT_NFR[[test_num]]$draws("lambda"), prob_outer = 0.95) +
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("lambda"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 param_true = tibble(
-    parameter = grep("^N\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
-    x = b_ou_NFR$case_true[1:ind[test_num], 1]
+    parameter = grep("^N\\[.+\\]$", varnames_GT_NFRM[[test_num]], value = TRUE),
+    x = b_ou_NFRM$case_true[1:ind[test_num], 1]
 )
-mcmc_areas(test_GT_NFR[[test_num]]$draws("N"), prob_outer = 0.95) +
+mcmc_areas(test_GT_NFRM[[test_num]]$draws("N"), prob_outer = 0.95) +
     geom_point(aes(x = x), param_true, color = "red", size = 1)
 
 ```
@@ -537,37 +531,37 @@ library(patchwork)
 
 # 1. β_x
 param_true_x <- tibble(
-  parameter = grep("^beta_x\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+  parameter = grep("^beta_x\\[.+\\]$", varnames_GT_NFRM[[test_num]], value = TRUE),
   x         = beta1[1:ind[test_num]]
 )
-p1 <- mcmc_areas(test_GT_NFR[[test_num]]$draws("beta_x"), prob_outer = 0.95) +
+p1 <- mcmc_areas(test_GT_NFRM[[test_num]]$draws("beta_x"), prob_outer = 0.95) +
   geom_point(data = param_true_x, aes(x = x), color = "red", size = 1) +
   ggtitle("β_x")
 
 # 2. season
 param_true_s <- tibble(
-  parameter = grep("^season\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+  parameter = grep("^season\\[.+\\]$", varnames_GT_NFRM[[test_num]], value = TRUE),
   x         = s_t[1:ind[test_num]]
 )
-p2 <- mcmc_areas(test_GT_NFR[[test_num]]$draws("season"), prob_outer = 0.95) +
+p2 <- mcmc_areas(test_GT_NFRM[[test_num]]$draws("season"), prob_outer = 0.95) +
   geom_point(data = param_true_s, aes(x = x), color = "red", size = 1) +
   ggtitle("season")
 
 # 3. β_s
 param_true_bs <- tibble(
-  parameter = grep("^beta_s\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+  parameter = grep("^beta_s\\[.+\\]$", varnames_GT_NFRM[[test_num]], value = TRUE),
   x         = beta_s
 )
-p3 <- mcmc_areas(test_GT_NFR[[test_num]]$draws("beta_s"), prob_outer = 0.95) +
+p3 <- mcmc_areas(test_GT_NFRM[[test_num]]$draws("beta_s"), prob_outer = 0.95) +
   geom_point(data = param_true_bs, aes(x = x), color = "red", size = 1) +
   ggtitle("β_s")
 
 # 4. η
 param_true_eta <- tibble(
-  parameter = grep("^eta\\[.+\\]$", varnames_GT_NFR[[test_num]], value = TRUE),
+  parameter = grep("^eta\\[.+\\]$", varnames_GT_NFRM[[test_num]], value = TRUE),
   x         = eta[1:ind[test_num]]
 )
-p4 <- mcmc_areas(test_GT_NFR[[test_num]]$draws("eta"), prob_outer = 0.95) +
+p4 <- mcmc_areas(test_GT_NFRM[[test_num]]$draws("eta"), prob_outer = 0.95) +
   geom_point(data = param_true_eta, aes(x = x), color = "red", size = 1) +
   ggtitle("η")
 

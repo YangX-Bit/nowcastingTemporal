@@ -24,6 +24,28 @@ source(file.path(path_source_nowcasting, "simulation", "simulations_functions_fi
 source(file.path(path_source_nowcasting, "functions", "prior_function.R"))
 source(file.path(path_source_nowcasting, "functions", "fit_function.R"))
 source(file.path(path_source_nowcasting, "functions", "plot_function.R"))
+
+error_metrics <- function(predicted, actual) {
+  # same length
+  stopifnot(length(predicted) == length(actual))
+  
+  # RMSE (Root Mean Squared Error)
+  rmse <- sqrt(mean((predicted - actual)^2))
+  
+  # RMSPE (Root Mean Squared Percentage Error)
+  rmspe <- sqrt(mean(((predicted - actual)/actual)^2)) * 100
+  
+  # MAE (Mean Absolute Error)
+  mae <- mean(abs(predicted - actual))
+  
+  # MAPE (Mean Absolute Percentage Error)
+  mape <- mean(abs((predicted - actual)/actual)) * 100
+
+  list(RMSE = rmse,
+       RMSPE = rmspe,
+       MAE = mae,
+       MAPE = mape)
+}
 ```
 
 
@@ -83,6 +105,7 @@ test_ARABM = model$sample(
     iter_sampling = 10000,
     iter_warmup = 5000,
     chains = 3,
+    parallel_chains = 3,
     refresh = 0,
     thin = 1)
 varnames_ARABM <- test_ARABM$summary()$variable
@@ -111,6 +134,10 @@ error_metrics(tail(mean_N_ARABM, test_length),
 ```
 
 ```{r}
+test_length <- 5
+error_metrics(tail(mean_N_ARABM, test_length), 
+     tail(rj_actual_cases$sum_of_cases,test_length))
+
 error_metrics(mean_N_ARABM, 
      rj_actual_cases$sum_of_cases)
 ```

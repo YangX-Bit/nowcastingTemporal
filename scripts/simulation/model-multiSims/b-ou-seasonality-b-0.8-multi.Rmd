@@ -165,6 +165,14 @@ for (i in 1:num_sims) {
 
 lambda <- mu_t
 
+
+par(mfrow = c(2,3))
+plot(s_t, type = "l")
+plot(w_t, type = "l")
+plot(beta1 * x_t, type = "l")
+plot(epsilon_t, type = "l")
+plot(log_lambda, type = "l")
+
 ```
 
 ## Non-fully reported scenario
