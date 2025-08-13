@@ -305,7 +305,7 @@ run_moving_window <- function(root_dir_infodengue, root_dir_GT,
 }
 
 
-extract_N_summary <- function(results, num_N = 8, model_name = "ARABM") {
+extract_N_summary <- function(results, num_N = 1, model_name = "ARABM") {
   # num_N: number of N values to extract from the end (latest num_N elements)
   
   out_list <- list()

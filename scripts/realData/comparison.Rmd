@@ -39,7 +39,7 @@ iter_sampling <- 5000
 iter_warmup <- 2000
 window_length <- 10
 thin <- 2
-step_size <- 2
+step_size <- 1
 chain_num <- 1
  
 ew_start <- "202410"
@@ -168,9 +168,11 @@ results_wGT <- run_moving_window(
   posterior_draws_path = file.path(path_proj, "draws", "length8")
 )
 
-arabm <- extract_N_summary(results, num_N = 6)
-arabm_wGT <- extract_N_summary(results_wGT, num_N = 6, model_name = "ARABMwGT")
+arabm <- extract_N_summary(results1, num_N = 6)
+arabm_wGT <- extract_N_summary(results_wGT1, num_N = 6, model_name = "ARABMwGT")
 
+results1 <- tail(results,10)
+results_wGT1 <- tail(results_wGT,10)
 print("done")
 ```
 
@@ -189,7 +191,7 @@ result_out <- baseline %>%
 #                                root_dir_infodengue = path_source_denguetracker_infodengue,
 #                                state,
 #                                202511) 
-n_last <- 4
+n_last <- 1
 
 result_out_cut <- result_out %>%
   filter(!is.na(ARABM)) %>%
@@ -208,9 +210,6 @@ Bastos_metrics
 GT_metrics 
 ARABM_metrics
 ARABMwGT_metrics
-
-
-
 ```
 
 ```{r}
@@ -232,7 +231,7 @@ ARABM_metrics
 ARABMwGT_metrics
 ```
 ```{r}
-num_head <- 4
+num_head <- 1
 
 
 Bastos_metrics <- error_metrics(head(result_out_cut$cases_est_id,num_head), 
