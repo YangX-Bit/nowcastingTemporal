@@ -22,7 +22,7 @@ path_source_nowcasting <- file.path(dirname(path_proj), "nowcasting", "source")
 
 source(file.path(path_source_nowcasting, "simulation", "simulations_functions_final.R"))
 source(file.path(path_source_nowcasting, "functions", "prior_function.R"))
-post_draws_path_NFRM = file.path(file.path(dirname(dirname(path_proj)),"projects","draws","NFRM"))
+post_draws_path_FR = file.path(file.path(dirname(dirname(path_proj)),"projects","draws","FR"))
 
 source(file.path(path_proj, "source", "functions", "simulation_functions.R"))
 
@@ -83,7 +83,7 @@ E     <- 1000
 num_sims = 5
 n_weeks   <-  c(105, 118, 131, 144, 156)
 #n_weeks   <-  c(52)
-lambda_seq_NFRM <- matrix(NA, ncol = T_len, nrow = num_sims)
+lambda_seq_FR <- matrix(NA, ncol = T_len, nrow = num_sims)
 
 
 # set the total var and ratio
@@ -168,9 +168,9 @@ for (i in 1:num_sims) {
   lambda_t   <- exp(log_lambda)
   mu_t  <- E * lambda_t
   
-  lambda_seq_NFRM[i,] <- mu_t
+  lambda_seq_FR[i,] <- mu_t
 }
-lambda_seq_NFRM[1,1]
+lambda_seq_FR[1,1]
 ```
 
 ## Non-fully reported scenario
@@ -179,20 +179,20 @@ lambda_seq_NFRM[1,1]
 
 ```{r}
 D <- 15
-data_NFRM <- list()
+data_FR <- list()
 
 for (j in 1:num_sims) {
-  data_NFRM[[j]] <- simulateData(
+  data_FR[[j]] <- simulateData(
     params = list(
       data = list(
-        lambda = lambda_seq_NFRM[j,],
+        lambda = lambda_seq_FR[j,],
         T       = T_len,
         date_start = as.Date("2024-01-01"),
         D = D
       ),
       q_model = list(
         method        = "b_ou",
-        method_params = list(theta_logb = 0.7, mu_logb = log(0.2), init_logb = log(0.2), sigma_logb = 0.4,
+        method_params = list(theta_logb = 0.7, mu_logb = log(0.8), init_logb = log(0.8), sigma_logb = 0.4,
                              theta_logitphi = 0.7, 
                              mu_logitphi = inverse_logistic_transform(0.2, 0, 1), 
                              init_logitphi = inverse_logistic_transform(0.2, 0, 1), sigma_logitphi = 0.15)
@@ -203,7 +203,7 @@ for (j in 1:num_sims) {
 
 par(mfrow = c(2, 3))
 for (i in 1:num_sims) {
-  matplot(t(data_NFRM[[i]]$q), type = "l", lty = 1, ylim = c(0, 1))
+  matplot(t(data_FR[[i]]$q), type = "l", lty = 1, ylim = c(0, 1))
 }
 
 
@@ -212,10 +212,10 @@ for (i in 1:num_sims) {
 ### Model fitting
 
 ```{r, warning=F}
-t0_bsl_NFRM <- Sys.time()
+t0_bsl_FR <- Sys.time()
 
 # 1) param table
-param_tbl_NFRM <- expand.grid(
+param_tbl_FR <- expand.grid(
   n_weeks = n_weeks,
   run     = seq_len(num_sims)
 )
@@ -223,14 +223,14 @@ param_tbl_NFRM <- expand.grid(
 hypers = hypers_q(phi_ref = 0.1, D_ref = 25, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 # 2) run everything
 
-results_bsl_NFRM <- pmap(param_tbl_NFRM, function(n_weeks, run) {
+results_bsl_FR <- pmap(param_tbl_FR, function(n_weeks, run) {
   message("Simulating: ", n_weeks, " weeks — run ", run)
   
   stan_data <- c(
     list(
       T = n_weeks,
       D = D,
-      Y = data_NFRM[[run]]$case_reported_cumulated[1:n_weeks, ]
+      Y = data_FR[[run]]$case_reported_cumulated[1:n_weeks, ]
     ),
     hypers
   )
@@ -245,7 +245,7 @@ suppressMessages(
         refresh       = refresh,
         thin          = thin,
         show_messages = if_show_messages,
-        output_dir = post_draws_path_NFRM
+        output_dir = post_draws_path_FR
       )
     )
   )
@@ -261,21 +261,21 @@ suppressMessages(
 
 # 4) Result (adress)
 
-t1_bsl_NFRM <- Sys.time()
+t1_bsl_FR <- Sys.time()
 ```
 
 ```{r}
-t0_prps_NFRM <- Sys.time()
+t0_prps_FR <- Sys.time()
 hypers = hypers_q(phi_ref = 0.1, D_ref = 25, type = "exponential", alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15)
 
 # run everything
-results_prps_NFRM <- pmap(param_tbl_NFRM, function(n_weeks, run) {
+results_prps_FR <- pmap(param_tbl_FR, function(n_weeks, run) {
   message("Simulating: ", n_weeks, " weeks — run ", run)
   
   stan_data <-     c(
     list(T = n_weeks, 
          D = D, 
-         Y = data_NFRM[[run]]$case_reported_cumulated[1:n_weeks, ]), 
+         Y = data_FR[[run]]$case_reported_cumulated[1:n_weeks, ]), 
     hypers, 
     list(K = ncol(matrix(x_t)), 
          x = as.matrix(matrix(x_t)[1:n_weeks, 1]),
@@ -295,7 +295,7 @@ suppressMessages(
         refresh       = refresh,
         thin          = thin,
         show_messages = if_show_messages,
-        output_dir = post_draws_path_NFRM
+        output_dir = post_draws_path_FR
       )
     )
   )
@@ -310,9 +310,9 @@ suppressMessages(
 })
 
 # 4) Result
-files_prps_NFRM <- map(results_prps_NFRM, "files")
+files_prps_FR <- map(results_prps_FR, "files")
 
-t1_prps_NFRM <- Sys.time()
+t1_prps_FR <- Sys.time()
 ```
 
 ```{r}
@@ -345,27 +345,27 @@ n_w        <- length(n_weeks)
 total_runs <- n_w * num_sims
 last_lens  <- c(3,4, 5, D)
 
-all_results_NFRM <- vector("list", length(last_lens))
-names(all_results_NFRM) <- paste0("last_", last_lens)
+all_results_FR <- vector("list", length(last_lens))
+names(all_results_FR) <- paste0("last_", last_lens)
 
 for (li in seq_along(last_lens)) {
   Print(paste0("The ",li,"th simulations."))
   L <- last_lens[li]
 
-  metrics_prps_NFRM <- replicate(n_w, vector("list", num_sims), simplify = FALSE)
-  metrics_bsl_NFRM  <- replicate(n_w, vector("list", num_sims), simplify = FALSE)
+  metrics_prps_FR <- replicate(n_w, vector("list", num_sims), simplify = FALSE)
+  metrics_bsl_FR  <- replicate(n_w, vector("list", num_sims), simplify = FALSE)
 
   for (i in seq_along(n_weeks)) {
     wks <- n_weeks[i]
     for (run in seq_len(num_sims)) {
       idx <- (run - 1) * n_w + i
 
-      pred_bsl  <- get_N_lastL_mean(files_bsl_NFRM[[idx]],  wks, L)
-      pred_prps <- get_N_lastL_mean(files_prps_NFRM[[idx]], wks, L)
-      actual    <- tail(data_NFRM[[run]]$case_true[1:wks], L)
+      pred_bsl  <- get_N_lastL_mean(files_bsl_FR[[idx]],  wks, L)
+      pred_prps <- get_N_lastL_mean(files_prps_FR[[idx]], wks, L)
+      actual    <- tail(data_FR[[run]]$case_true[1:wks], L)
 
-      metrics_bsl_NFRM[[i]][[run]]  <- error_metrics(pred_bsl,  actual)
-      metrics_prps_NFRM[[i]][[run]] <- error_metrics(pred_prps, actual)
+      metrics_bsl_FR[[i]][[run]]  <- error_metrics(pred_bsl,  actual)
+      metrics_prps_FR[[i]][[run]] <- error_metrics(pred_prps, actual)
     }
   }
 
@@ -376,27 +376,27 @@ for (li in seq_along(last_lens)) {
     bsl_RMSE   = NA, bsl_RMSPE  = NA, bsl_MAE  = NA, bsl_MAPE  = NA
   )
   for (i in seq_along(n_weeks)) {
-    prps_list_NFRM <- metrics_prps_NFRM[[i]]
-    bsl_list_NFRM  <- metrics_bsl_NFRM[[i]]
+    prps_list_FR <- metrics_prps_FR[[i]]
+    bsl_list_FR  <- metrics_bsl_FR[[i]]
 
-    out$prps_RMSE[i]  <- mean(sapply(prps_list_NFRM, `[[`, "RMSE"))
-    out$prps_RMSPE[i] <- mean(sapply(prps_list_NFRM, `[[`, "RMSPE"))
-    out$prps_MAE[i]   <- mean(sapply(prps_list_NFRM, `[[`, "MAE"))
-    out$prps_MAPE[i]  <- mean(sapply(prps_list_NFRM, `[[`, "MAPE"))
+    out$prps_RMSE[i]  <- mean(sapply(prps_list_FR, `[[`, "RMSE"))
+    out$prps_RMSPE[i] <- mean(sapply(prps_list_FR, `[[`, "RMSPE"))
+    out$prps_MAE[i]   <- mean(sapply(prps_list_FR, `[[`, "MAE"))
+    out$prps_MAPE[i]  <- mean(sapply(prps_list_FR, `[[`, "MAPE"))
 
-    out$bsl_RMSE[i]   <- mean(sapply(bsl_list_NFRM,  `[[`, "RMSE"))
-    out$bsl_RMSPE[i]  <- mean(sapply(bsl_list_NFRM,  `[[`, "RMSPE"))
-    out$bsl_MAE[i]    <- mean(sapply(bsl_list_NFRM,  `[[`, "MAE"))
-    out$bsl_MAPE[i]   <- mean(sapply(bsl_list_NFRM,  `[[`, "MAPE"))
+    out$bsl_RMSE[i]   <- mean(sapply(bsl_list_FR,  `[[`, "RMSE"))
+    out$bsl_RMSPE[i]  <- mean(sapply(bsl_list_FR,  `[[`, "RMSPE"))
+    out$bsl_MAE[i]    <- mean(sapply(bsl_list_FR,  `[[`, "MAE"))
+    out$bsl_MAPE[i]   <- mean(sapply(bsl_list_FR,  `[[`, "MAPE"))
   }
 
-  all_results_NFRM[[li]] <- out
+  all_results_FR[[li]] <- out
 }
 
-final_tbl_NFRM <- do.call(rbind, all_results_NFRM)
-row.names(final_tbl_NFRM) <- NULL
+final_tbl_FR <- do.call(rbind, all_results_FR)
+row.names(final_tbl_FR) <- NULL
 
-final_long_NFRM <- final_tbl_NFRM %>%
+final_long_FR <- final_tbl_FR %>%
   tidyr::pivot_longer(
     cols      = -c(last_len, n_weeks),
     names_to  = c("model", "metric"),
@@ -410,7 +410,7 @@ final_long_NFRM <- final_tbl_NFRM %>%
   dplyr::mutate(across(c(prps, bsl), ~ round(.x, 2)),
                 diff_bsl_minus_prps = bsl - prps)
 
-final_long_NFRM
+final_long_FR
 
 ```
 
@@ -419,8 +419,8 @@ final_long_NFRM
 
 
 ```{r}
-all_crps_NFRM <- vector("list", length(last_lens))
-names(all_crps_NFRM) <- paste0("last_", last_lens)
+all_crps_FR <- vector("list", length(last_lens))
+names(all_crps_FR) <- paste0("last_", last_lens)
 
 for (li in seq_along(last_lens)) {
   L <- last_lens[li]
@@ -435,11 +435,11 @@ for (li in seq_along(last_lens)) {
 
     for (run in seq_len(num_sims)) {
       idx    <- (run - 1) * length(n_weeks) + i
-      y_true <- tail(data_NFRM[[run]]$case_true[1:wks], L)
+      y_true <- tail(data_FR[[run]]$case_true[1:wks], L)
 
 
-      pred_prps <- get_N_lastL_draws(files_prps_NFRM[[idx]], wks, L)
-      pred_bsl  <- get_N_lastL_draws(files_bsl_NFRM[[idx]],  wks, L)
+      pred_prps <- get_N_lastL_draws(files_prps_FR[[idx]], wks, L)
+      pred_bsl  <- get_N_lastL_draws(files_bsl_FR[[idx]],  wks, L)
 
       tmp_prps[run] <- mean(crps_sample(y = y_true, dat = pred_prps))
       tmp_bsl[run]  <- mean(crps_sample(y = y_true, dat = pred_bsl))
@@ -451,7 +451,7 @@ for (li in seq_along(last_lens)) {
     crps_bsl[i]  <- mean(tmp_bsl)
   }
 
-  all_crps_NFRM[[li]] <- data.frame(
+  all_crps_FR[[li]] <- data.frame(
     last_len  = L,
     n_weeks   = n_weeks,
     prps_CRPS = crps_prps,
@@ -460,35 +460,35 @@ for (li in seq_along(last_lens)) {
   )
 }
 
-final_crps_tbl_NFRM <- do.call(rbind, all_crps_NFRM)
-rownames(final_crps_tbl_NFRM) <- NULL
-print(final_crps_tbl_NFRM)
+final_crps_tbl_FR <- do.call(rbind, all_crps_FR)
+rownames(final_crps_tbl_FR) <- NULL
+print(final_crps_tbl_FR)
 
 ```
 
 
 
 ```{r}
-path_to_save_NFRM <- file.path(path_proj, "data", "simulation","results","NFRM")
+path_to_save_FR <- file.path(path_proj, "data", "simulation","results","FR")
 
 # sim data
-saveRDS(data_NFRM, file = file.path(path_to_save_NFRM, "data_NFRM.rds"))
+saveRDS(data_FR, file = file.path(path_to_save_FR, "data_FR.rds"))
 # path
-saveRDS(files_prps_NFRM, file = file.path(path_to_save_NFRM, "files_prps_NFRM.rds"))
-saveRDS(files_bsl_NFRM,  file = file.path(path_to_save_NFRM, "files_bsl_NFRM.rds"))
+saveRDS(files_prps_FR, file = file.path(path_to_save_FR, "files_prps_FR.rds"))
+saveRDS(files_bsl_FR,  file = file.path(path_to_save_FR, "files_bsl_FR.rds"))
 # metrics
-saveRDS(final_long_NFRM, file = file.path(path_to_save_NFRM, "final_long_NFRM.rds"))
-saveRDS(final_crps_tbl_NFRM, file = file.path(path_to_save_NFRM, "final_crps_tbl_NFRM.rds"))
+saveRDS(final_long_FR, file = file.path(path_to_save_FR, "final_long_FR.rds"))
+saveRDS(final_crps_tbl_FR, file = file.path(path_to_save_FR, "final_crps_tbl_FR.rds"))
 ```
 
 
 ```{r}
-files_prps_NFRM <- readRDS(file.path(path_to_save_NFRM, "files_prps_NFRM.rds"))
-files_bsl_NFRM  <- readRDS(file.path(path_to_save_NFRM, "files_bsl_NFRM.rds"))
+files_prps_FR <- readRDS(file.path(path_to_save_FR, "files_prps_FR.rds"))
+files_bsl_FR  <- readRDS(file.path(path_to_save_FR, "files_bsl_FR.rds"))
 
 # result table
-final_long_NFRM     <- readRDS(file.path(path_to_save_NFRM, "final_long_NFRM.rds"))
-final_crps_tbl_NFRM <- readRDS(file.path(path_to_save_NFRM, "final_crps_tbl_NFRM.rds"))
+final_long_FR     <- readRDS(file.path(path_to_save_FR, "final_long_FR.rds"))
+final_crps_tbl_FR <- readRDS(file.path(path_to_save_FR, "final_crps_tbl_FR.rds"))
 
 ```
 
