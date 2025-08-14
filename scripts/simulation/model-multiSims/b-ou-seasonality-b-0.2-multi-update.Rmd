@@ -22,7 +22,7 @@ path_source_nowcasting <- file.path(dirname(path_proj), "nowcasting", "source")
 
 source(file.path(path_source_nowcasting, "simulation", "simulations_functions_final.R"))
 source(file.path(path_source_nowcasting, "functions", "prior_function.R"))
-post_draws_path = file.path(file.path(dirname(dirname(path_proj)),"projects","draws"))
+post_draws_path_NFRM = file.path(file.path(dirname(dirname(path_proj)),"projects","draws","NFRM"))
 
 source(file.path(path_proj, "source", "functions", "simulation_functions.R"))
 
@@ -47,6 +47,8 @@ error_metrics <- function(predicted, actual) {
        MAE = mae,
        MAPE = mape)
 }
+
+
 ```
 
 ```{r}
@@ -61,12 +63,12 @@ b_ou_lambda <-  file.path(path_proj, "source", "models", "b-ou-GT-combined-seaso
 model_prps <- cmdstan_model(b_ou_lambda)
 
 #setting
-iter_sampling = 5000
-iter_warmup   = 2000
-chains        = 2 
-refresh       = 500
-thin          = 2
-
+iter_sampling = 2500
+iter_warmup   = 1000
+chains        = 4
+refresh       = 0
+thin          = 1
+if_show_messages = F
 ```
 # GT
 
@@ -78,7 +80,7 @@ t     <- seq_len(T_len)
 week  <- ((t - 1) %% weeks_per_yr) + 1
 E     <- 1000
 
-num_sims = 2
+num_sims = 5
 n_weeks   <-  c(105, 118, 131, 144, 156)
 #n_weeks   <-  c(52)
 lambda_seq_NFRM <- matrix(NA, ncol = T_len, nrow = num_sims)
@@ -161,7 +163,6 @@ for (i in 1:num_sims) {
   beta0 <- 0.2
   
   # --- (4) Risk -------------------------------------------------------
-  
   log_lambda <- beta0 + beta1 * x_t + s_t + w_t + epsilon_t
   
   lambda_t   <- exp(log_lambda)
@@ -169,7 +170,7 @@ for (i in 1:num_sims) {
   
   lambda_seq_NFRM[i,] <- mu_t
 }
-
+lambda_seq_NFRM[1,1]
 ```
 
 ## Non-fully reported scenario
@@ -210,7 +211,7 @@ for (i in 1:num_sims) {
 
 ### Model fitting
 
-```{r}
+```{r, warning=F}
 t0_bsl_NFRM <- Sys.time()
 
 # 1) param table
@@ -233,16 +234,20 @@ results_bsl_NFRM <- pmap(param_tbl_NFRM, function(n_weeks, run) {
     ),
     hypers
   )
-
-  fit <- model_bsl$sample(
-    data          = stan_data,
-    iter_sampling = iter_sampling,
-    iter_warmup   = iter_warmup,
-    chains        = chains,
-    parallel_chains = chains,
-    refresh       = refresh,
-    thin          = thin,
-    output_dir = post_draws_path
+suppressMessages(
+  suppressWarnings(
+      fit <- model_bsl$sample(
+        data          = stan_data,
+        iter_sampling = iter_sampling,
+        iter_warmup   = iter_warmup,
+        chains        = chains,
+        parallel_chains = chains,
+        refresh       = refresh,
+        thin          = thin,
+        show_messages = if_show_messages,
+        output_dir = post_draws_path_NFRM
+      )
+    )
   )
   
   out <- list(
@@ -255,7 +260,6 @@ results_bsl_NFRM <- pmap(param_tbl_NFRM, function(n_weeks, run) {
 })
 
 # 4) Result (adress)
-files_bsl_NFRM <- map(results_bsl_NFRM, "files")
 
 t1_bsl_NFRM <- Sys.time()
 ```
@@ -289,7 +293,8 @@ results_prps_NFRM <- pmap(param_tbl_NFRM, function(n_weeks, run) {
     parallel_chains = chains,
     refresh       = refresh,
     thin          = thin,
-    output_dir = post_draws_path
+    show_messages = if_show_messages,
+    output_dir = post_draws_path_NFRM
   )
   
   out <- list(
@@ -303,19 +308,45 @@ results_prps_NFRM <- pmap(param_tbl_NFRM, function(n_weeks, run) {
 
 # 4) Result
 files_prps_NFRM <- map(results_prps_NFRM, "files")
+
 t1_prps_NFRM <- Sys.time()
 ```
+
+```{r}
+# only read last Lth N
+# for RMSP, RMSPE, etc.
+get_N_lastL_mean <- function(files, wks, L) {
+  fit2 <- as_cmdstan_fit(files)
+  vars <- paste0("N[", (wks - L + 1):wks, "]")
+  s    <- fit2$summary(variables = vars)$mean  # 
+  rm(fit2); gc()
+  s
+}
+
+# for CRPS
+get_N_lastL_draws <- function(files, wks, L) {
+  fit2 <- as_cmdstan_fit(files)
+  vars <- paste0("N[", (wks - L + 1):wks, "]")
+  dm   <- fit2$draws(variables = vars, format = "draws_matrix")  # draws x L
+  mat  <- t(dm)  # L x draws
+  rm(fit2, dm); gc()
+  mat
+}
+
+```
+
 
 ```{r}
 
 n_w        <- length(n_weeks)
 total_runs <- n_w * num_sims
-last_lens  <- c(3, 5, D)
+last_lens  <- c(3,4, 5, D)
 
 all_results_NFRM <- vector("list", length(last_lens))
 names(all_results_NFRM) <- paste0("last_", last_lens)
 
 for (li in seq_along(last_lens)) {
+  Print(paste0("The ",li,"th simulations."))
   L <- last_lens[li]
 
   metrics_prps_NFRM <- replicate(n_w, vector("list", num_sims), simplify = FALSE)
@@ -335,7 +366,6 @@ for (li in seq_along(last_lens)) {
     }
   }
 
-  # 下面这段是你的原始汇总逻辑，不变
   out <- data.frame(
     last_len = L,
     n_weeks  = n_weeks,
@@ -379,32 +409,9 @@ final_long_NFRM <- final_tbl_NFRM %>%
 
 final_long_NFRM
 
-
-
 ```
 
-```{r}
-# only read last Lth N
-# for RMSP, RMSPE, etc.
-get_N_lastL_mean <- function(files, wks, L) {
-  fit2 <- as_cmdstan_fit(files)
-  vars <- paste0("N[", (wks - L + 1):wks, "]")
-  s    <- fit2$summary(variables = vars)$mean  # 
-  rm(fit2); gc()
-  s
-}
 
-# for CRPS
-get_N_lastL_draws <- function(files, wks, L) {
-  fit2 <- as_cmdstan_fit(files)
-  vars <- paste0("N[", (wks - L + 1):wks, "]")
-  dm   <- fit2$draws(variables = vars, format = "draws_matrix")  # draws x L
-  mat  <- t(dm)  # L x draws
-  rm(fit2, dm); gc()
-  mat
-}
-
-```
 
 
 
@@ -456,4 +463,29 @@ print(final_crps_tbl_NFRM)
 
 ```
 
+
+
+```{r}
+path_to_save_NFRM <- file.path(path_proj, "data", "simulation","results","NFRM")
+
+# sim data
+saveRDS(data_NFRM, file = file.path(path_to_save_NFRM, "data_NFRM.rds"))
+# path
+saveRDS(files_prps_NFRM, file = file.path(path_to_save_NFRM, "files_prps_NFRM.rds"))
+saveRDS(files_bsl_NFRM,  file = file.path(path_to_save_NFRM, "files_bsl_NFRM.rds"))
+# metrics
+saveRDS(final_long_NFRM, file = file.path(path_to_save_NFRM, "final_long_NFRM.rds"))
+saveRDS(final_crps_tbl_NFRM, file = file.path(path_to_save_NFRM, "final_crps_tbl_NFRM.rds"))
+```
+
+
+```{r}
+files_prps_NFRM <- readRDS(file.path(path_to_save_NFRM, "files_prps_NFRM.rds"))
+files_bsl_NFRM  <- readRDS(file.path(path_to_save_NFRM, "files_bsl_NFRM.rds"))
+
+# result table
+final_long_NFRM     <- readRDS(file.path(path_to_save_NFRM, "final_long_NFRM.rds"))
+final_crps_tbl_NFRM <- readRDS(file.path(path_to_save_NFRM, "final_crps_tbl_NFRM.rds"))
+
+```
 

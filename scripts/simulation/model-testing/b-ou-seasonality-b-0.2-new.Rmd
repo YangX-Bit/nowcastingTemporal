@@ -70,11 +70,11 @@ week  <- ((t - 1) %% weeks_per_yr) + 1
 E     <- rep(1000, T_len)
 
 # set the total var and ratio
-total_var = 0.01
+total_var = 0.05
 
 tau_epsilon <- 1
-tau_ar <- 1
-tau_cov <- 1
+tau_ar <- 3
+tau_cov <- 6
 
 sigma_epsilon <- sqrt(total_var * tau_epsilon / (tau_epsilon + tau_ar + tau_cov))
 sd_ar <- sqrt(total_var * tau_ar / (tau_epsilon + tau_ar + tau_cov))
@@ -206,6 +206,7 @@ plot(b_ou_NFRM$phi, pch = 19, type = "b")
 par(mfrow = c(1, 1))
 matplot(t(b_ou_NFRM$q), type = "l", lty = 1, ylim = c(0, 1))
 
+sum(b_ou_NFRM$q[,16]>0.95)/length(b_ou_NFRM$q[,16])
 ```
 
 ### Model fitting
