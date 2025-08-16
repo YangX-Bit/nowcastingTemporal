@@ -48,7 +48,7 @@ error_metrics <- function(predicted, actual) {
        MAPE = mape)
 }
 
-
+set_cmdstan_path(file.path(dirname(dirname(path_proj)),"cmdstan-2.32.0"))
 ```
 
 ```{r}
@@ -75,19 +75,19 @@ if_show_messages = F
 ```{r}
 # --- preliminaries unchanged -------------------------------------------------
 #set.seed(111)
-years <- 3; weeks_per_yr <- 52; T_len <- years * weeks_per_yr
+years <- 2; weeks_per_yr <- 52; T_len <- years * weeks_per_yr
 t     <- seq_len(T_len)
 week  <- ((t - 1) %% weeks_per_yr) + 1
 E     <- 1000
 
 num_sims = 5
-n_weeks   <-  c(105, 118, 131, 144, 156)
+n_weeks   <-   c(53,66,79,92,104)
 #n_weeks   <-  c(52)
 lambda_seq_FR <- matrix(NA, ncol = T_len, nrow = num_sims)
 
 
 # set the total var and ratio
-total_var = 0.1
+total_var = 0.033
 
 tau_epsilon <- 1
 tau_ar <- 4
@@ -192,7 +192,7 @@ for (j in 1:num_sims) {
       ),
       q_model = list(
         method        = "b_ou",
-        method_params = list(theta_logb = 0.7, mu_logb = log(0.8), init_logb = log(0.8), sigma_logb = 0.4,
+        method_params = list(theta_logb = 0.7, mu_logb = log(0.7), init_logb = log(0.7), sigma_logb = 0.4,
                              theta_logitphi = 0.7, 
                              mu_logitphi = inverse_logistic_transform(0.2, 0, 1), 
                              init_logitphi = inverse_logistic_transform(0.2, 0, 1), sigma_logitphi = 0.15)
@@ -260,6 +260,7 @@ suppressMessages(
 })
 
 # 4) Result (adress)
+files_bsl_FR <- map(results_bsl_FR, "files")
 
 t1_bsl_FR <- Sys.time()
 ```
@@ -349,7 +350,6 @@ all_results_FR <- vector("list", length(last_lens))
 names(all_results_FR) <- paste0("last_", last_lens)
 
 for (li in seq_along(last_lens)) {
-  Print(paste0("The ",li,"th simulations."))
   L <- last_lens[li]
 
   metrics_prps_FR <- replicate(n_w, vector("list", num_sims), simplify = FALSE)

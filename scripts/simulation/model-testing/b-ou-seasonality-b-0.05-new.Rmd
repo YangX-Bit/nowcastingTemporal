@@ -64,13 +64,13 @@ model_GT <- cmdstan_model(b_ou_lambda)
 ```{r}
 # --- preliminaries unchanged -------------------------------------------------
 #set.seed(111)
-years <- 3; weeks_per_yr <- 52; T_len <- years * weeks_per_yr
+years <- 2; weeks_per_yr <- 52; T_len <- years * weeks_per_yr
 t     <- seq_len(T_len)
 week  <- ((t - 1) %% weeks_per_yr) + 1
 E     <- rep(1000, T_len)
 
 # set the total var and ratio
-total_var = 0.1
+total_var = 0.033
 
 tau_epsilon <- 1
 tau_ar <- 4
@@ -192,8 +192,8 @@ params_b_ou_NFR <- list(
   ),
   q_model = list(
     method        = "b_ou",
-    method_params = list(theta_logb = 0.7, mu_logb = log(0.05), init_logb = log(0.05), sigma_logb = 0.4,
-                         theta_logitphi = 0.7, mu_logitphi = inverse_logistic_transform(0.05, 0, 1), init_logitphi = inverse_logistic_transform(0.05, 0, 1), sigma_logitphi = 0.15)
+    method_params = list(theta_logb = 0.7, mu_logb = log(0.7), init_logb = log(0.7), sigma_logb = 0.4,
+                         theta_logitphi = 0.7, mu_logitphi = inverse_logistic_transform(0.2, 0, 1), init_logitphi = inverse_logistic_transform(0.2, 0, 1), sigma_logitphi = 0.15)
   )
 )
 
@@ -210,7 +210,8 @@ matplot(t(b_ou_NFR$q), type = "l", lty = 1, ylim = c(0, 1))
 ### Model fitting
 
 ```{r}
-ind = c(52,104,134)
+ind = c(53,66,79,92,104)
+
 varnames_NFR <- list()
 vanilla_NFR <- list()
 test_NFR <- list()
@@ -220,9 +221,10 @@ for (i in 1:length(ind)) {
   stan_data <- c(list(T = ind[i], D = D, Y = b_ou_NFR$case_reported_cumulated[1:ind[i], ]), hypers)
   test_NFR[[i]] = model$sample(
     data = stan_data,
-    iter_sampling = 3000,
-    iter_warmup = 2000,
-    chains = 1,
+    iter_sampling = 2000,
+    iter_warmup = 1000,
+    chains = 2,
+    parallel_chains = 2,
     refresh = 0,
     thin = 1)
   varnames_NFR[[i]] <- test_NFR[[i]]$summary()$variable
@@ -246,9 +248,10 @@ for (i in 1:length(ind)) {
                     ))
 test_GT_NFR[[i]] = model_GT$sample(
     data = stan_data_GT_NFR,
-    iter_sampling = 3000,
-    iter_warmup = 2000,
-    chains = 1,
+    iter_sampling = 2000,
+    iter_warmup = 1000,
+    chains = 2,
+    parallel_chains = 2,
     refresh = 500,
     thin = 1)
   varnames_GT_NFR[[i]] <- test_GT_NFR[[i]]$summary()$variable
@@ -297,7 +300,7 @@ mean_withGT_NFR_combined_last
 ```
 
 ```{r}
-test_num <- 3
+test_num <- 1
 
 # GT
 y_true_NFR <- b_ou_NFR$case_true[1:ind[test_num]]

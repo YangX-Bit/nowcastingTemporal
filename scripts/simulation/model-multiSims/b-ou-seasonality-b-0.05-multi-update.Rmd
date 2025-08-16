@@ -48,7 +48,7 @@ error_metrics <- function(predicted, actual) {
        MAPE = mape)
 }
 
-
+set_cmdstan_path(file.path(dirname(dirname(path_proj)),"cmdstan-2.32.0"))
 ```
 
 ```{r}
@@ -75,19 +75,19 @@ if_show_messages = F
 ```{r}
 # --- preliminaries unchanged -------------------------------------------------
 #set.seed(111)
-years <- 3; weeks_per_yr <- 52; T_len <- years * weeks_per_yr
+years <- 2; weeks_per_yr <- 52; T_len <- years * weeks_per_yr
 t     <- seq_len(T_len)
 week  <- ((t - 1) %% weeks_per_yr) + 1
 E     <- 1000
 
 num_sims = 5
-n_weeks   <-  c(105, 118, 131, 144, 156)
+n_weeks   <-  c(53,66,79,92,104)
 #n_weeks   <-  c(52)
 lambda_seq_NFRS <- matrix(NA, ncol = T_len, nrow = num_sims)
 
 
 # set the total var and ratio
-total_var = 0.1
+total_var = 0.033
 
 tau_epsilon <- 1
 tau_ar <- 4
@@ -170,7 +170,7 @@ for (i in 1:num_sims) {
   
   lambda_seq_NFRS[i,] <- mu_t
 }
-lambda_seq_NFRS[1,1]
+
 ```
 
 ## Non-fully reported scenario
@@ -230,7 +230,7 @@ results_bsl_NFRS <- pmap(param_tbl_NFRS, function(n_weeks, run) {
     list(
       T = n_weeks,
       D = D,
-      Y = data_NFRS[[run]]$case_reported_cumulated[1:n_weeks, ]
+      Y = num_sims[[run]]$case_reported_cumulated[1:n_weeks, ]
     ),
     hypers
   )
@@ -260,6 +260,7 @@ suppressMessages(
 })
 
 # 4) Result (adress)
+files_bsl_NFRS <- map(results_bsl_NFRS, "files")
 
 t1_bsl_NFRS <- Sys.time()
 ```
@@ -349,7 +350,7 @@ all_results_NFRS <- vector("list", length(last_lens))
 names(all_results_NFRS) <- paste0("last_", last_lens)
 
 for (li in seq_along(last_lens)) {
-  Print(paste0("The ",li,"th simulations."))
+  print(paste0("The ",li,"th simulations."))
   L <- last_lens[li]
 
   metrics_prps_NFRS <- replicate(n_w, vector("list", num_sims), simplify = FALSE)
@@ -422,6 +423,8 @@ final_long_NFRS
 all_crps_NFRS <- vector("list", length(last_lens))
 names(all_crps_NFRS) <- paste0("last_", last_lens)
 
+i <- 4
+
 for (li in seq_along(last_lens)) {
   L <- last_lens[li]
 
@@ -459,6 +462,7 @@ for (li in seq_along(last_lens)) {
     diff_CRPS = crps_bsl - crps_prps
   )
 }
+
 
 final_crps_tbl_NFRS <- do.call(rbind, all_crps_NFRS)
 rownames(final_crps_tbl_NFRS) <- NULL

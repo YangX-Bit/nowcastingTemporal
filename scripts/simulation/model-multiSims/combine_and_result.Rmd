@@ -1,0 +1,40 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-08-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(cmdstanr)
+library(splines)
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+```
+
+
+```{r results table}
+# add label
+final_long_FR   <- final_long_FR   %>% mutate(scenario = "FR")
+final_long_NFRM <- final_long_NFRM %>% mutate(scenario = "NFRM")
+final_long_NFRS <- final_long_NFRS %>% mutate(scenario = "NFRS")
+
+# combine
+final_long_all <- bind_rows(final_long_FR, final_long_NFRM, final_long_NFRS)
+
+# reslult
+head(final_long_all)
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
