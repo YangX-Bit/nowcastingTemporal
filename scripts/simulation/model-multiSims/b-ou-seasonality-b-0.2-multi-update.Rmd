@@ -315,29 +315,6 @@ files_prps_NFRM <- map(results_prps_NFRM, "files")
 t1_prps_NFRM <- Sys.time()
 ```
 
-```{r}
-# only read last Lth N
-# for RMSP, RMSPE, etc.
-get_N_lastL_mean <- function(files, wks, L) {
-  fit2 <- as_cmdstan_fit(files)
-  vars <- paste0("N[", (wks - L + 1):wks, "]")
-  s    <- fit2$summary(variables = vars)$mean  # 
-  rm(fit2); gc()
-  s
-}
-
-# for CRPS
-get_N_lastL_draws <- function(files, wks, L) {
-  fit2 <- as_cmdstan_fit(files)
-  vars <- paste0("N[", (wks - L + 1):wks, "]")
-  dm   <- fit2$draws(variables = vars, format = "draws_matrix")  # draws x L
-  mat  <- t(dm)  # L x draws
-  rm(fit2, dm); gc()
-  mat
-}
-
-```
-
 
 ```{r}
 
@@ -422,47 +399,98 @@ final_long_NFRM
 all_crps_NFRM <- vector("list", length(last_lens))
 names(all_crps_NFRM) <- paste0("last_", last_lens)
 
+# NEW: containers for coverage
+all_cr50_NFRM <- vector("list", length(last_lens))
+all_cr95_NFRM <- vector("list", length(last_lens))
+names(all_cr95_NFRM) <- names(all_cr50_NFRM) <- names(all_crps_NFRM)
+
 for (li in seq_along(last_lens)) {
   L <- last_lens[li]
-
+  
   crps_prps <- numeric(length(n_weeks))
   crps_bsl  <- numeric(length(n_weeks))
-
+  cr50_prps <- numeric(length(n_weeks))
+  cr50_bsl  <- numeric(length(n_weeks))
+  cr95_prps <- numeric(length(n_weeks))
+  cr95_bsl  <- numeric(length(n_weeks))
+  
   for (i in seq_along(n_weeks)) {
     wks <- n_weeks[i]
     tmp_prps <- numeric(num_sims)
     tmp_bsl  <- numeric(num_sims)
-
+    tmp_cr50_prps <- numeric(num_sims)
+    tmp_cr50_bsl  <- numeric(num_sims)
+    tmp_cr95_prps <- numeric(num_sims)
+    tmp_cr95_bsl  <- numeric(num_sims)
+    
     for (run in seq_len(num_sims)) {
       idx    <- (run - 1) * length(n_weeks) + i
       y_true <- tail(data_NFRM[[run]]$case_true[1:wks], L)
-
-
+      
       pred_prps <- get_N_lastL_draws(files_prps_NFRM[[idx]], wks, L)
       pred_bsl  <- get_N_lastL_draws(files_bsl_NFRM[[idx]],  wks, L)
-
+      
+      # CRPS
       tmp_prps[run] <- mean(crps_sample(y = y_true, dat = pred_prps))
       tmp_bsl[run]  <- mean(crps_sample(y = y_true, dat = pred_bsl))
-
+      
+      # 50%
+      tmp_cr50_prps[run] <- coverage_rate_sample(y_true, pred_prps, level = 0.50)
+      tmp_cr50_bsl[run]  <- coverage_rate_sample(y_true, pred_bsl,  level = 0.50)
+      # 95%
+      tmp_cr95_prps[run] <- coverage_rate_sample(y_true, pred_prps, level = 0.95)
+      tmp_cr95_bsl[run]  <- coverage_rate_sample(y_true, pred_bsl,  level = 0.95)
+      
       rm(pred_prps, pred_bsl); gc()
     }
-
+    
     crps_prps[i] <- mean(tmp_prps)
     crps_bsl[i]  <- mean(tmp_bsl)
+    cr50_prps[i] <- mean(tmp_cr50_prps)
+    cr50_bsl[i]  <- mean(tmp_cr50_bsl)
+    cr95_prps[i] <- mean(tmp_cr95_prps)
+    cr95_bsl[i]  <- mean(tmp_cr95_bsl)
   }
-
+  
+  # --- assemble data.frames ---
   all_crps_NFRM[[li]] <- data.frame(
     last_len  = L,
     n_weeks   = n_weeks,
-    prps_CRPS = crps_prps,
-    bsl_CRPS  = crps_bsl,
-    diff_CRPS = crps_bsl - crps_prps
+    metric    = "CRPS",
+    prps      = crps_prps,
+    bsl       = crps_bsl,
+    diff_bsl_minus_prps = crps_bsl - crps_prps
+  )
+  
+  all_cr50_NFRM[[li]] <- data.frame(
+    last_len  = L,
+    n_weeks   = n_weeks,
+    metric    = "CR50",               
+    prps      = cr50_prps,            
+    bsl       = cr50_bsl,
+    diff_bsl_minus_prps = cr50_bsl - cr50_prps
+  )
+  
+  # NEW: 95% coverage
+  all_cr95_NFRM[[li]] <- data.frame(
+    last_len  = L,
+    n_weeks   = n_weeks,
+    metric    = "CR95",               
+    prps      = cr95_prps,
+    bsl       = cr95_bsl,
+    diff_bsl_minus_prps = cr95_bsl - cr95_prps
   )
 }
 
-final_crps_tbl_NFRM <- do.call(rbind, all_crps_NFRM)
-rownames(final_crps_tbl_NFRM) <- NULL
-print(final_crps_tbl_NFRM)
+final_crps_tbl_NFRM  <- do.call(rbind, all_crps_NFRM)
+final_cr50_tbl_NFRM <- do.call(rbind, all_cr50_NFRM)
+final_cr95_tbl_NFRM <- do.call(rbind, all_cr95_NFRM)
+
+# Optionally combine:
+final_NFRM <- rbind(final_crps_tbl_NFRM, final_cr50_tbl_NFRM, final_cr95_tbl_NFRM)
+rownames(final_NFRM) <- NULL
+print(final_NFRM)
+
 
 ```
 
@@ -478,7 +506,7 @@ saveRDS(files_prps_NFRM, file = file.path(path_to_save_NFRM, "files_prps_NFRM.rd
 saveRDS(files_bsl_NFRM,  file = file.path(path_to_save_NFRM, "files_bsl_NFRM.rds"))
 # metrics
 saveRDS(final_long_NFRM, file = file.path(path_to_save_NFRM, "final_long_NFRM.rds"))
-saveRDS(final_crps_tbl_NFRM, file = file.path(path_to_save_NFRM, "final_crps_tbl_NFRM.rds"))
+saveRDS(final_NFRM, file = file.path(path_to_save_NFRM, "final_NFRM.rds"))
 ```
 
 
@@ -488,7 +516,7 @@ files_bsl_NFRM  <- readRDS(file.path(path_to_save_NFRM, "files_bsl_NFRM.rds"))
 
 # result table
 final_long_NFRM     <- readRDS(file.path(path_to_save_NFRM, "final_long_NFRM.rds"))
-final_crps_tbl_NFRM <- readRDS(file.path(path_to_save_NFRM, "final_crps_tbl_NFRM.rds"))
+final_crps_tbl_NFRM <- readRDS(file.path(path_to_save_NFRM, "final_NFRM.rds"))
 
 ```
 

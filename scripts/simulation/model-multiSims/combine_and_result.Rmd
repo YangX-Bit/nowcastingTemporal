@@ -12,6 +12,9 @@ library(splines)
 library(ggplot2)
 library(reshape2)
 library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
 ```
 
 
@@ -21,20 +24,69 @@ final_long_FR   <- final_long_FR   %>% mutate(scenario = "FR")
 final_long_NFRM <- final_long_NFRM %>% mutate(scenario = "NFRM")
 final_long_NFRS <- final_long_NFRS %>% mutate(scenario = "NFRS")
 
+final_FR <- final_FR %>% mutate(scenario = "FR")
+final_NFRM <- final_NFRM %>% mutate(scenario = "NFRM")
+final_NFRS <- final_NFRS %>% mutate(scenario = "NFRS")
+
 # combine
-final_long_all <- bind_rows(final_long_FR, final_long_NFRM, final_long_NFRS)
+final_long_all <- bind_rows(final_long_FR, final_long_NFRM, final_long_NFRS, 
+                            final_FR, final_NFRM, final_NFRS)
 
 # reslult
 head(final_long_all)
 
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+
+```{r}
+metrics <- c("RMSE","RMSPE","CR95","CR50","CRPS")
+last_lens <- c(4,15)
+scenarios <- c("FR", "NFRM", "NFRS")
+
+for (i in 1:length(last_lens)) {
+  for (j in 1:length(scenarios)) {
+    df_long <- filter_metric_pairs(final_long_all, last_len = last_lens[i], scenario = scenarios[j],
+                               metrics = metrics, baseline_col = "bsl", proposed_col = "prps")
+    ww <- to_wide_metric_pairs(df_long, metrics = metrics, digits = 2)
+    
+    df_hi <- highlight_metric_pairs_simple(
+      df_wide    = ww$wide_print,
+      metrics    = metrics,
+      directions = c(RMSE="lower", RMSPE="lower", CR95="closer", CR50="closer", CRPS="lower"),
+      targets    = c(CR95=0.95, CR50=0.50),  # or 95/50 if your data are percentages
+      color = "red",
+      tie_highlight = FALSE                   # <- no highlight on ties
+)
+
+    latex_tab <- render_latex_metric_pairs(
+      df_print = df_hi,
+      caption  = paste0("Baseline vs Proposed across metrics (", scenario = scenarios[j], "; last ", last_lens[i]  ," weeks)")
+)
+    cat(latex_tab)
+    cat("\n") 
+  }
+}
+
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+metrics <- c("RMSE","RMSPE","CR95","CR50","CRPS")
+
+latex_tab <- build_multi_scenario_table_latex(
+  data        = final_long_all,
+  last_len    = 15,
+  scenarios   = c("FR","NFRM","NFRS"),
+  metrics     = metrics,
+  directions  = c(RMSE="lower", RMSPE="lower", CR95="closer", CR50="closer", CRPS="lower"),
+  targets     = c(CR95=0.95, CR50=0.50),   
+  digits      = 2,
+  color       = "red",
+  caption     = "Baseline vs Proposed across metrics (FR / NFRM / NFRS; last 4 weeks)"
+)
+
+cat(latex_tab)
+
+```
