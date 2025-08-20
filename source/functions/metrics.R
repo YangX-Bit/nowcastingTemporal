@@ -632,3 +632,108 @@ build_multi_scenario_table_latex <- function(
     # Merge the Scenario column (multirow style) and draw \midrule between groups
     kableExtra::collapse_rows(columns = 1, latex_hline = "major", valign = "top")
 }
+
+
+
+####### helper function for prediction result table ######
+# --- Low-level helper: read posterior draws for N[start:end] -----------------
+# files: character vector of CmdStan CSV paths (all chains) for one fit
+# start,end: 1-based inclusive indices of weeks
+# Returns: matrix (rows = weeks in [start:end], cols = draws)
+get_N_window_draws <- function(files, start, end) {
+  stopifnot(length(files) >= 1, start <= end)
+  fit  <- as_cmdstan_fit(files)
+  vars <- paste0("N[", start:end, "]")
+  dm   <- t(fit$draws(variables = vars, format = "draws_matrix"))  # (time x draws)
+  rm(fit); invisible(gc())
+  dm
+}
+
+# --- Summarize draws into mean and multiple central credible intervals -------
+# mat_ld: (time x draws) numeric matrix
+# levels: vector of central interval levels, e.g., c(0.5, 0.8, 0.95)
+# Returns: tibble with columns: mean, lXX, uXX for each level
+summarise_draws_mat <- function(mat_ld, levels = c(0.5, 0.95)) {
+  qs     <- sort(unique(levels))
+  lowers <- (1 - qs) / 2
+  uppers <- 1 - lowers
+  
+  means  <- apply(mat_ld, 1, mean)
+  qmat   <- sapply(c(lowers, uppers), function(p) apply(mat_ld, 1, quantile, probs = p))
+  
+  out <- tibble::tibble(mean = means)
+  for (i in seq_along(qs)) {
+    out[[paste0("l", round(qs[i] * 100))]] <- qmat[, i]                         # lower
+    out[[paste0("u", round(qs[i] * 100))]] <- qmat[, length(qs) + i]            # upper
+  }
+  out
+}
+
+# --- Main: cumulative-window summary for ANY scenario ------------------------
+# scenario_name: "FR"/"NFRM"/"NFRS" (kept in output)
+# run: which simulation replicate to extract (1..num_sims)
+# n_weeks: integer vector of evaluation time points (e.g., c(53,66,79,92,104))
+# base_L: initial window length at the first evaluation (e.g., D=15)
+# levels: CI levels, e.g., c(0.5, 0.95)
+# data_list: list of length num_sims; each element must have:
+#   - $case_true               : numeric vector length T
+#   - $case_reported_cumulated : numeric matrix T x (D+1), cumulative by delay d=0..D
+# files_bsl, files_prps: lists aligned with your indexing rule
+#   idx = (run - 1) * length(n_weeks) + i    (i is index in n_weeks)
+# Returns: tidy tibble with per-week summaries inside each cumulative window,
+#          including a new column `reported` (observed at eval time t)
+make_run_summary_cumulative <- function(
+    scenario_name,
+    run,
+    n_weeks,
+    base_L,
+    levels,
+    data_list,
+    files_bsl,
+    files_prps
+) {
+  stopifnot(run >= 1, run <= length(data_list))
+  n_w   <- length(n_weeks)
+  gaps  <- c(0, diff(n_weeks))               # incremental gaps
+  L_seq <- base_L + cumsum(gaps)            # cumulative window sizes
+  
+  # for reported extraction
+  reported_mat <- data_list[[run]]$case_reported_cumulated
+  stopifnot(is.matrix(reported_mat))
+  D_max <- ncol(reported_mat) - 1            # infer D from matrix
+  
+  purrr::map_dfr(seq_along(n_weeks), function(i) {
+    wks  <- n_weeks[i]
+    Li   <- min(L_seq[i], wks)               # window cannot exceed observed weeks
+    start_idx <- wks - Li + 1
+    end_idx   <- wks
+    weeks_idx <- start_idx:end_idx
+    
+    idx <- (run - 1) * n_w + i               # your existing files_* index rule
+    
+    # Ground truth in the window
+    truth_vec <- data_list[[run]]$case_true[weeks_idx]
+    
+    # Reported at eval time t = wks:
+    # for each week k in window, delay d = min(D_max, wks - k)
+    delays   <- pmin(D_max, wks - weeks_idx)
+    # matrix indexing: row = week index, col = (delay + 1) (since d=0 maps to column 1)
+    reported_vec <- reported_mat[cbind(weeks_idx, delays + 1)]
+    
+    # Proposed
+    draws_prps <- get_N_window_draws(files_prps[[idx]], start_idx, end_idx)
+    sum_prps   <- summarise_draws_mat(draws_prps, levels = levels) %>%
+      dplyr::mutate(model = "Proposed", week = weeks_idx, truth = truth_vec,
+                    reported = reported_vec, window_L = Li, eval_t = wks)
+    
+    # Baseline
+    draws_bsl <- get_N_window_draws(files_bsl[[idx]], start_idx, end_idx)
+    sum_bsl   <- summarise_draws_mat(draws_bsl, levels = levels) %>%
+      dplyr::mutate(model = "Baseline", week = weeks_idx, truth = truth_vec,
+                    reported = reported_vec, window_L = Li, eval_t = wks)
+    
+    dplyr::bind_rows(sum_prps, sum_bsl) %>%
+      dplyr::mutate(scenario = scenario_name, run = run) %>%
+      dplyr::relocate(scenario, run, eval_t, window_L, week, model, truth, reported)
+  })
+}

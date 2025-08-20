@@ -90,3 +90,162 @@ latex_tab <- build_multi_scenario_table_latex(
 cat(latex_tab)
 
 ```
+
+# preds table for plot 
+```{r}
+preds_result <- bind_rows(preds_result_FR, preds_result_NFRM, preds_result_NFRS)
+```
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# ---- choose replicate & CI level ----
+run_to_plot <- 1
+ci_level    <- 0.95
+tag         <- as.integer(round(ci_level * 100))
+lcol        <- paste0("l", tag)
+ucol        <- paste0("u", tag)
+
+# ---- filter & order ----
+df_plot <- preds_result %>%
+  filter(run == run_to_plot, scenario %in% c("FR","NFRM","NFRS")) %>%
+  mutate(
+    scenario = factor(scenario, levels = c("FR","NFRM","NFRS")),
+    model    = factor(model, levels = c("Baseline","Proposed"))
+  )
+
+# enforce left-to-right time order in facets (e.g., 53,66,79,92,104)
+levels_eval <- paste0("t = ", sort(unique(df_plot$eval_t)))
+df_plot <- df_plot %>%
+  mutate(eval_lab = factor(paste0("t = ", eval_t), levels = levels_eval))
+
+# print(table(df_plot$scenario, df_plot$model, useNA = "ifany"))
+
+# ---- colors ----
+method_colors <- c(
+  "Baseline"       = "#96C37D",
+  "Proposed"       = "#2F7FC1",
+  "Actual cases"   = "#C82423",
+  "Reported cases" = "black"
+)
+
+# ---- plot (6 rows x 5 cols: (scenario × model) by eval_t) ----
+sims_result_plot <- ggplot(df_plot, aes(x = week)) +
+  # ribbons for the chosen CI (group by scenario/model/panel)
+  geom_ribbon(
+    aes(ymin = .data[[lcol]], ymax = .data[[ucol]],
+        fill = model,
+        group = interaction(scenario, model, eval_lab)),
+    alpha = 0.25, show.legend = FALSE, na.rm = TRUE
+  ) +
+  # posterior means (no legend for models)
+  geom_line(
+    aes(y = mean, color = model,
+        group = interaction(scenario, model, eval_lab)),
+    linewidth = rel(0.5), show.legend = FALSE, na.rm = TRUE
+  ) +
+  # reported overlay (line + points) — legend ON; group by panel
+  geom_line(
+    aes(y = reported, color = "Reported cases",
+        group = eval_lab),
+    linewidth = rel(0.4), show.legend = TRUE, na.rm = TRUE
+  ) +
+  geom_point(
+    aes(y = reported, color = "Reported cases",
+        group = eval_lab),
+    size = rel(0.4), show.legend = TRUE, na.rm = TRUE
+  ) +
+  # truth overlay — legend ON; group by panel
+  geom_line(
+    aes(y = truth, color = "Actual cases",
+        group = eval_lab),
+    linewidth = rel(0.4), linetype = 6, show.legend = TRUE, na.rm = TRUE
+  ) +
+  facet_grid(
+    rows = vars(scenario, model), 
+    cols = vars(eval_lab),         
+    scales = "free_x",
+    switch = "y"
+  ) +
+  scale_color_manual(
+    values = method_colors,
+    breaks = c("Actual cases","Reported cases"),
+    name = NULL
+  ) +
+  scale_fill_manual(
+    values = method_colors[c("Baseline","Proposed")],
+    guide = "none"
+  ) +
+  labs(x = NULL, y = "Number of cases") +
+  theme_bw(base_size = 10) +
+  theme(
+    legend.position      = c(0.15, 0.995),        
+    legend.justification = c(1, 1),
+    legend.background    = element_rect(fill = scales::alpha("white", 0.75), color = NA),
+    legend.key.height    = unit(0.2, "cm"),
+    legend.key.width     = unit(0.4, "cm"),    
+    legend.text          = element_text(size = 6), 
+    strip.background     = element_blank(),
+    strip.text           = element_text(face = "bold"),
+    panel.grid.minor     = element_blank(),
+    panel.grid.major.x   = element_blank(),
+    axis.title.y         = element_text(margin = margin(r = 6))
+  )
+
+
+print(sims_result_plot)
+
+ggsave(filename = file.path(path_proj, "plots_to_show", "simulation", "results.png"),
+       plot = sims_result_plot,
+       width = 8, height = 6, dpi = 300)
+
+```
+
+
+
+
+```{r}
+names(results_b_constant_NFR_1) <- sapply(scoreRange, function(x) TeX(as.character(x), bold = TRUE))
+
+output <- bind_rows(results_b_constant_NFR_1, .id = "time_point") |>
+  pivot_longer(
+    cols = mean_q_constant:upper_b_ou,
+    names_to = c(".value", "model"),
+    names_pattern = "([a-z]+)_(.+)"
+  ) |>
+  mutate(model = factor(model,
+    levels = c("q_constant", "b_constant", "b_rw", "b_ou"),
+    labels = c(
+      TeX("M1: Non-parametric $q_d$", bold = TRUE),
+      TeX("M2: Parametric $q(d)$", bold = TRUE),
+      TeX("M3: $q_t(d)$ with random walks", bold = TRUE),
+      TeX("M4: $q_t(d)$ with OU processes", bold = TRUE)))
+  )
+method_colors <- setNames(c("#008080", "#228B22", "#8446c6", "#4682B4", "gray40", "tomato"),
+  c(levels(output$model), "Current reported cases", "Actual cases"))
+
+results_b_constant_NFR_1_plots <- ggplot(output) +
+  geom_ribbon(aes(x = date, ymin = lower, ymax = upper, fill = model), alpha = 0.4, show.legend = FALSE) +
+  geom_line(aes(date, mean, color = model), linewidth = rel(0.4), show.legend = FALSE) +
+  geom_line(aes(date, case_reported, color = "Current reported cases"), linewidth = rel(0.4)) +
+  geom_point(aes(date, case_reported, color = "Current reported cases"), size = rel(0.5)) +
+  geom_line(aes(date, case_true, color = "Actual cases"), linetype = 6) +
+  facet_grid(time_point ~ model, labeller = label_parsed, scales = "free") +
+  labs(fill = NULL, color = NULL, x = NULL, y = "Number of cases") +
+  theme_bw(9) +
+  theme(
+    legend.position = c(0.88, 0.94),
+    legend.key.height = unit(0.4, 'cm'),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  ) +
+  scale_fill_manual(values = method_colors[1:4]) +
+  scale_color_manual(values = method_colors, breaks = names(method_colors)[5:6])
+ggsave(filename = file.path(path_proj, "plots_to_show", "simulation", "b_constant", "NFR_b_constant_separated.png"),
+       plot = results_b_constant_NFR_1_plots,
+       width = 8, height = 6, dpi = 300)
+```
+

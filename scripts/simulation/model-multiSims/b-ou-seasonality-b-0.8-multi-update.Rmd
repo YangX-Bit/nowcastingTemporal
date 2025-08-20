@@ -170,7 +170,7 @@ for (i in 1:num_sims) {
   
   lambda_seq_FR[i,] <- mu_t
 }
-lambda_seq_FR[1,1]
+
 ```
 
 ## Non-fully reported scenario
@@ -495,6 +495,26 @@ print(final_FR)
 
 ```
 
+# generate table for plots
+```{r}
+library(tibble)
+# Pick one replicate and CI levels
+m <- 1
+ci_levels <- c(0.5, 0.95)
+
+# FR
+preds_result_FR <- make_run_summary_cumulative(
+  scenario_name = "FR",
+  run      = m,
+  n_weeks  = n_weeks,
+  base_L   = D,
+  levels   = ci_levels,
+  data_list = data_FR,
+  files_bsl = files_bsl_FR,
+  files_prps= files_prps_FR
+)
+```
+
 
 
 ```{r}
@@ -508,6 +528,8 @@ saveRDS(files_bsl_FR,  file = file.path(path_to_save_FR, "files_bsl_FR.rds"))
 # metrics
 saveRDS(final_long_FR, file = file.path(path_to_save_FR, "final_long_FR.rds"))
 saveRDS(final_FR, file = file.path(path_to_save_FR, "final_FR.rds"))
+# prediction results
+saveRDS(preds_result_FR, file = file.path(path_to_save_FR, "final_FR_predictions.rds"))
 ```
 
 
@@ -519,5 +541,6 @@ files_bsl_FR  <- readRDS(file.path(path_to_save_FR, "files_bsl_FR.rds"))
 final_long_FR     <- readRDS(file.path(path_to_save_FR, "final_long_FR.rds"))
 final_FR <- readRDS(file.path(path_to_save_FR, "final_FR.rds"))
 
+preds_result_FR <- readRDS(file.path(path_to_save_FR, "final_FR_predictions.rds"))
 ```
 

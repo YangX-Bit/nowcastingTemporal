@@ -494,7 +494,26 @@ print(final_NFRM)
 
 ```
 
+# generate table for plots
+```{r}
+library(tibble)
 
+# Pick one replicate and CI levels
+m <- 1
+ci_levels <- c(0.5, 0.95)
+
+# NFRM
+preds_result_NFRM <- make_run_summary_cumulative(
+  scenario_name = "NFRM",
+  run      = m,
+  n_weeks  = n_weeks,
+  base_L   = D,
+  levels   = ci_levels,
+  data_list = data_NFRM,
+  files_bsl = files_bsl_NFRM,
+  files_prps= files_prps_NFRM
+)
+```
 
 ```{r}
 path_to_save_NFRM <- file.path(path_proj, "data", "simulation","results","NFRM")
@@ -507,6 +526,8 @@ saveRDS(files_bsl_NFRM,  file = file.path(path_to_save_NFRM, "files_bsl_NFRM.rds
 # metrics
 saveRDS(final_long_NFRM, file = file.path(path_to_save_NFRM, "final_long_NFRM.rds"))
 saveRDS(final_NFRM, file = file.path(path_to_save_NFRM, "final_NFRM.rds"))
+# prediction results
+saveRDS(preds_result_NFRM, file = file.path(path_to_save_NFRM, "final_NFRM_predictions.rds"))
 ```
 
 
@@ -518,5 +539,6 @@ files_bsl_NFRM  <- readRDS(file.path(path_to_save_NFRM, "files_bsl_NFRM.rds"))
 final_long_NFRM     <- readRDS(file.path(path_to_save_NFRM, "final_long_NFRM.rds"))
 final_crps_tbl_NFRM <- readRDS(file.path(path_to_save_NFRM, "final_NFRM.rds"))
 
+preds_result_NFRM <- readRDS(file.path(path_to_save_NFRS, "final_NFRM_predictions.rds"))
 ```
 
