@@ -75,102 +75,107 @@ if_show_messages = F
 ```{r}
 # --- preliminaries unchanged -------------------------------------------------
 #set.seed(111)
-years <- 2; weeks_per_yr <- 52; T_len <- years * weeks_per_yr
-t     <- seq_len(T_len)
-week  <- ((t - 1) %% weeks_per_yr) + 1
-E     <- 1000
+# years <- 2; weeks_per_yr <- 52; T_len <- years * weeks_per_yr
+# t     <- seq_len(T_len)
+# week  <- ((t - 1) %% weeks_per_yr) + 1
+# E     <- 1000
+# 
+# num_sims = 5
+# n_weeks   <-  c(53,66,79,92,104)
+# #n_weeks   <-  c(52)
+# lambda_seq_NFRS <- matrix(NA, ncol = T_len, nrow = num_sims)
+# 
+# 
+# # set the total var and ratio
+# total_var = 0.033
+# 
+# tau_epsilon <- 1
+# tau_ar <- 4
+# tau_cov <- 4
+# 
+# sigma_epsilon <- sqrt(total_var * tau_epsilon / (tau_epsilon + tau_ar + tau_cov))
+# sd_ar <- sqrt(total_var * tau_ar / (tau_epsilon + tau_ar + tau_cov))
+# beta1 <- sqrt(total_var * tau_cov / (tau_epsilon + tau_ar + tau_cov))
+# 
+# # --- seasonality ---------------------------------------------------
+# # --- baisc setting -------------------------------------------------
+# H_max <- 10            # harmonic
+# P     <- weeks_per_yr   # periodic
+# 
+# # --- Fourier basis -------------------------------------------------
+# # to each h，we generate cos(h*angle) and sin(h*angle)
+# angle <- 2 * pi * (t - 1) / P  # for each t we have one angle
+# fourier_list <- lapply(1:H_max, function(h) {
+#   cbind(
+#     cos_h = cos(h * angle),
+#     sin_h = sin(h * angle)
+#   )
+# })
+# fourier_basis <- do.call(cbind, fourier_list)
+# # column name
+# colnames(fourier_basis) <- unlist(lapply(1:H_max, function(h) {
+#   c(paste0("cos_h", h), paste0("sin_h", h))
+# }))
+# 
+# # (fixed, to make it simplier)
+# # --- coefficient beta_s for seasonality---------------------------------
+# set.seed(3)
+# H_used <- 5
+# ratio  <- c(10, 2, 1, 1, 1) # ratio of each frequency (SD)）  
+# sigma_s    <- 0.5                # total variance
+# 
+# # —— calc the scaling ratio c ——  
+# # total "share" of var：
+# sigma_s_raw <- sum(2 * (ratio^2))  
+# # scaling ratio：
+# c     <- sqrt(sigma_s / sigma_s_raw)  
+# 
+# # —— σ_h ——  
+# sd_h   <- ratio * c           
+# sd_all <- rep(sd_h, each = 2)  # twice，for each cos_h and sin_h  
+# 
+# # —— generate beta_s and s_t ——  
+# beta_s <- rnorm(2 * H_used, mean = 0, sd = sd_all)  
+# s_t    <- as.vector(fourier_basis[, 1:(2*H_used)] %*% beta_s)
+# 
+# # clear seeds
+# rm(.Random.seed, envir = .GlobalEnv)
+# 
+# # sims loop
+# 
+# for (i in 1:num_sims) {
+#   # --- (1) Independent noise ---------------------------------------------------
+#   #sigma_epsilon  <- 0.1
+#   epsilon_t    <- rnorm(T_len, mean = 0, sd = sigma_epsilon)
+#   
+#   # --- (2) Dependent noise ---------------------------------------------------
+#   # sigma_epsilon = sqrt((1- rho_w^2) * var_ar)
+#   #sd_ar <- 0.1
+#   rho_w <- 0.8
+#   sigma_w  <- sqrt((1-rho_w^2) * sd_ar^2)
+#   w_t <- arima.sim(model = list(ar = rho_w), n = T_len,
+#                    sd = sigma_w)
+#   
+#   # --- (3) covariate X_t -------------------------------------------------------
+#   #x_t <- scale(rnorm(T_len))[, 1]        # standard normal, independent of other components
+#   x_t <- rnorm(T_len) 
+#   #beta1     <- 0.1
+#   beta0 <- 0.2
+#   
+#   # --- (4) Risk -------------------------------------------------------
+#   log_lambda <- beta0 + beta1 * x_t + s_t + w_t + epsilon_t
+#   
+#   lambda_t   <- exp(log_lambda)
+#   mu_t  <- E * lambda_t
+#   
+#   lambda_seq_NFRS[i,] <- mu_t
+# }
 
-num_sims = 5
-n_weeks   <-  c(53,66,79,92,104)
-#n_weeks   <-  c(52)
-lambda_seq_NFRS <- matrix(NA, ncol = T_len, nrow = num_sims)
+```
 
-
-# set the total var and ratio
-total_var = 0.033
-
-tau_epsilon <- 1
-tau_ar <- 4
-tau_cov <- 4
-
-sigma_epsilon <- sqrt(total_var * tau_epsilon / (tau_epsilon + tau_ar + tau_cov))
-sd_ar <- sqrt(total_var * tau_ar / (tau_epsilon + tau_ar + tau_cov))
-beta1 <- sqrt(total_var * tau_cov / (tau_epsilon + tau_ar + tau_cov))
-
-# --- seasonality ---------------------------------------------------
-# --- baisc setting -------------------------------------------------
-H_max <- 10            # harmonic
-P     <- weeks_per_yr   # periodic
-
-# --- Fourier basis -------------------------------------------------
-# to each h，we generate cos(h*angle) and sin(h*angle)
-angle <- 2 * pi * (t - 1) / P  # for each t we have one angle
-fourier_list <- lapply(1:H_max, function(h) {
-  cbind(
-    cos_h = cos(h * angle),
-    sin_h = sin(h * angle)
-  )
-})
-fourier_basis <- do.call(cbind, fourier_list)
-# column name
-colnames(fourier_basis) <- unlist(lapply(1:H_max, function(h) {
-  c(paste0("cos_h", h), paste0("sin_h", h))
-}))
-
-# (fixed, to make it simplier)
-# --- coefficient beta_s for seasonality---------------------------------
-set.seed(3)
-H_used <- 5
-ratio  <- c(10, 2, 1, 1, 1) # ratio of each frequency (SD)）  
-sigma_s    <- 0.5                # total variance
-
-# —— calc the scaling ratio c ——  
-# total "share" of var：
-sigma_s_raw <- sum(2 * (ratio^2))  
-# scaling ratio：
-c     <- sqrt(sigma_s / sigma_s_raw)  
-
-# —— σ_h ——  
-sd_h   <- ratio * c           
-sd_all <- rep(sd_h, each = 2)  # twice，for each cos_h and sin_h  
-
-# —— generate beta_s and s_t ——  
-beta_s <- rnorm(2 * H_used, mean = 0, sd = sd_all)  
-s_t    <- as.vector(fourier_basis[, 1:(2*H_used)] %*% beta_s)
-
-# clear seeds
-rm(.Random.seed, envir = .GlobalEnv)
-
-# sims loop
-
-for (i in 1:num_sims) {
-  # --- (1) Independent noise ---------------------------------------------------
-  #sigma_epsilon  <- 0.1
-  epsilon_t    <- rnorm(T_len, mean = 0, sd = sigma_epsilon)
-  
-  # --- (2) Dependent noise ---------------------------------------------------
-  # sigma_epsilon = sqrt((1- rho_w^2) * var_ar)
-  #sd_ar <- 0.1
-  rho_w <- 0.8
-  sigma_w  <- sqrt((1-rho_w^2) * sd_ar^2)
-  w_t <- arima.sim(model = list(ar = rho_w), n = T_len,
-                   sd = sigma_w)
-  
-  # --- (3) covariate X_t -------------------------------------------------------
-  #x_t <- scale(rnorm(T_len))[, 1]        # standard normal, independent of other components
-  x_t <- rnorm(T_len) 
-  #beta1     <- 0.1
-  beta0 <- 0.2
-  
-  # --- (4) Risk -------------------------------------------------------
-  log_lambda <- beta0 + beta1 * x_t + s_t + w_t + epsilon_t
-  
-  lambda_t   <- exp(log_lambda)
-  mu_t  <- E * lambda_t
-  
-  lambda_seq_NFRS[i,] <- mu_t
-}
-
+```{r}
+# use the same data from FR for the outbreak scenario
+lambda_seq_NFRS <- lambda_seq_FR
 ```
 
 ## Non-fully reported scenario

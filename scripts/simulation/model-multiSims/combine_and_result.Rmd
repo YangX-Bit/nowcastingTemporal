@@ -131,37 +131,36 @@ method_colors <- c(
   "Reported cases" = "black"
 )
 
-# ---- plot (6 rows x 5 cols: (scenario × model) by eval_t) ----
 sims_result_plot <- ggplot(df_plot, aes(x = week)) +
-  # ribbons for the chosen CI (group by scenario/model/panel)
+  # ribbons
   geom_ribbon(
     aes(ymin = .data[[lcol]], ymax = .data[[ucol]],
         fill = model,
         group = interaction(scenario, model, eval_lab)),
     alpha = 0.25, show.legend = FALSE, na.rm = TRUE
   ) +
-  # posterior means (no legend for models)
+  # posterior means
   geom_line(
     aes(y = mean, color = model,
         group = interaction(scenario, model, eval_lab)),
-    linewidth = rel(0.5), show.legend = FALSE, na.rm = TRUE
+    linewidth = 0.4, show.legend = FALSE, na.rm = TRUE
   ) +
-  # reported overlay (line + points) — legend ON; group by panel
+  # reported overlay 
   geom_line(
     aes(y = reported, color = "Reported cases",
-        group = eval_lab),
-    linewidth = rel(0.4), show.legend = TRUE, na.rm = TRUE
+        group = interaction(scenario, model, eval_lab)),
+    linewidth = 0.4, show.legend = TRUE, na.rm = TRUE
   ) +
   geom_point(
     aes(y = reported, color = "Reported cases",
-        group = eval_lab),
-    size = rel(0.4), show.legend = TRUE, na.rm = TRUE
+        group = interaction(scenario, model, eval_lab)),
+    size = 0.5, show.legend = TRUE, na.rm = TRUE
   ) +
-  # truth overlay — legend ON; group by panel
+  # truth overlay
   geom_line(
     aes(y = truth, color = "Actual cases",
-        group = eval_lab),
-    linewidth = rel(0.4), linetype = 6, show.legend = TRUE, na.rm = TRUE
+        group = interaction(scenario, model, eval_lab)),
+    linewidth = 0.5, linetype = 6, show.legend = TRUE, na.rm = TRUE
   ) +
   facet_grid(
     rows = vars(scenario, model), 
@@ -184,20 +183,27 @@ sims_result_plot <- ggplot(df_plot, aes(x = week)) +
     legend.position      = c(0.15, 0.995),        
     legend.justification = c(1, 1),
     legend.background    = element_rect(fill = scales::alpha("white", 0.75), color = NA),
-    legend.key.height    = unit(0.2, "cm"),
-    legend.key.width     = unit(0.4, "cm"),    
-    legend.text          = element_text(size = 6), 
+    legend.key.height    = unit(0.25, "cm"),
+    legend.key.width     = unit(0.5, "cm"),    
+    legend.text          = element_text(size = 7), 
     strip.background     = element_blank(),
     strip.text           = element_text(face = "bold"),
     panel.grid.minor     = element_blank(),
     panel.grid.major.x   = element_blank(),
     axis.title.y         = element_text(margin = margin(r = 6))
-  )
-
+  ) +
+  guides(color = guide_legend(
+    override.aes = list(
+      linetype  = c(6, 1),      
+      shape     = c(NA, 16),    
+      linewidth = c(0.5, 0.5),
+      size      = c(NA, 1)      # point size
+    )
+  ))
 
 print(sims_result_plot)
 
-ggsave(filename = file.path(path_proj, "plots_to_show", "simulation", "results.png"),
+ggsave(filename = file.path(path_proj, "plots_to_show", "simulation", "sims-results.png"),
        plot = sims_result_plot,
        width = 8, height = 6, dpi = 300)
 

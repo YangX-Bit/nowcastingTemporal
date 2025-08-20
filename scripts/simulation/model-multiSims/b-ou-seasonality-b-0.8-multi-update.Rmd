@@ -25,6 +25,7 @@ source(file.path(path_source_nowcasting, "functions", "prior_function.R"))
 post_draws_path_FR = file.path(file.path(dirname(dirname(path_proj)),"projects","draws","FR"))
 
 source(file.path(path_proj, "source", "functions", "simulation_functions.R"))
+source(file.path(path_proj, "source", "functions", "metrics.R"))
 
 error_metrics <- function(predicted, actual) {
   # same length
@@ -74,13 +75,13 @@ if_show_messages = F
 
 ```{r}
 # --- preliminaries unchanged -------------------------------------------------
-#set.seed(111)
+set.seed(111)
 years <- 2; weeks_per_yr <- 52; T_len <- years * weeks_per_yr
 t     <- seq_len(T_len)
 week  <- ((t - 1) %% weeks_per_yr) + 1
 E     <- 1000
 
-num_sims = 5
+num_sims = 1
 n_weeks   <-   c(53,66,79,92,104) 
 #n_weeks   <-  c(52)
 lambda_seq_FR <- matrix(NA, ncol = T_len, nrow = num_sims)
@@ -173,9 +174,9 @@ for (i in 1:num_sims) {
 
 ```
 
-## Non-fully reported scenario
+## fully reported scenario
 
-### Simulation - Not fully reported - Moderate
+### Simulation - fully reported - Moderate
 
 ```{r}
 D <- 15
