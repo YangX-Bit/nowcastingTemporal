@@ -737,3 +737,31 @@ make_run_summary_cumulative <- function(
       dplyr::relocate(scenario, run, eval_t, window_L, week, model, truth, reported)
   })
 }
+
+# For CRPS & CR
+get_last_maxL_draws <- function(files, wks, maxL) {
+  start_idx <- max(1, wks - maxL + 1)
+  vars      <- paste0("N[", start_idx:wks, "]")
+  fit       <- as_cmdstan_fit(files)
+  M         <- t(fit$draws(variables = vars, format = "draws_matrix")) # (time x draws)
+  rm(fit); invisible(gc())
+  # fill NAs to make the same length
+  if (nrow(M) < maxL) {
+    pad <- matrix(NA_real_, nrow = maxL - nrow(M), ncol = ncol(M))
+    M   <- rbind(pad, M)
+  }
+  # drop columns with NAs
+  keep <- colSums(!is.na(M)) == nrow(M)
+  if (!any(keep)) return(NULL)
+  M[, keep, drop = FALSE]
+}
+
+# coveraga rate
+coverage_rate_sample_fast <- function(y_true, mat_LxD, level) {
+  a <- (1 - level) / 2
+  b <- 1 - a
+  # quantile
+  qL <- matrixStats::rowQuantiles(mat_LxD, probs = a, na.rm = TRUE, interpolate = TRUE)
+  qU <- matrixStats::rowQuantiles(mat_LxD, probs = b, na.rm = TRUE, interpolate = TRUE)
+  mean(y_true >= qL & y_true <= qU)
+}

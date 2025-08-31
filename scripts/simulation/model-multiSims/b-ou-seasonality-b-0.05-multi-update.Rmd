@@ -27,25 +27,19 @@ post_draws_path_NFRS = file.path(file.path(dirname(dirname(path_proj)),"projects
 source(file.path(path_proj, "source", "functions", "simulation_functions.R"))
 
 error_metrics <- function(predicted, actual) {
-  # same length
-  stopifnot(length(predicted) == length(actual))
-  
-  # RMSE (Root Mean Squared Error)
-  rmse <- sqrt(mean((predicted - actual)^2))
-  
-  # RMSPE (Root Mean Squared Percentage Error)
-  rmspe <- sqrt(mean(((predicted - actual)/actual)^2)) * 100
-  
-  # MAE (Mean Absolute Error)
-  mae <- mean(abs(predicted - actual))
-  
-  # MAPE (Mean Absolute Percentage Error)
-  mape <- mean(abs((predicted - actual)/actual)) * 100
-
-  list(RMSE = rmse,
-       RMSPE = rmspe,
-       MAE = mae,
-       MAPE = mape)
+  ok <- is.finite(predicted) & is.finite(actual)
+  predicted <- predicted[ok]
+  actual    <- actual[ok]
+  if (length(predicted) == 0L) {
+    return(list(RMSE = NA_real_, RMSPE = NA_real_,
+                MAE  = NA_real_, MAPE  = NA_real_))
+  }
+  # calc metrics
+  rmse  <- sqrt(mean((predicted - actual)^2, na.rm = TRUE))
+  rmspe <- sqrt(mean(((predicted - actual) / pmax(abs(actual), .Machine$double.eps))^2, na.rm = TRUE))
+  mae   <- mean(abs(predicted - actual), na.rm = TRUE)
+  mape  <- mean(abs((predicted - actual) / pmax(abs(actual), .Machine$double.eps)), na.rm = TRUE)
+  list(RMSE = rmse, RMSPE = rmspe, MAE = mae, MAPE = mape)
 }
 
 set_cmdstan_path(file.path(dirname(dirname(path_proj)),"cmdstan-2.32.0"))
@@ -324,56 +318,79 @@ t1_prps_NFRS <- Sys.time()
 
 
 ```{r}
-
 n_w        <- length(n_weeks)
 total_runs <- n_w * num_sims
-last_lens  <- c(3,4, 5, D)
+last_lens  <- c(3, 4, 5, D)
 
+# read the data, save the last D_th result
+preds_bsl_D_NFRS  <- vector("list", total_runs)
+preds_prps_D_NFRS <- vector("list", total_runs)
+actual_D     <- vector("list", total_runs)
+
+for (i in seq_along(n_weeks)) {
+  wks <- n_weeks[i]
+  for (run in seq_len(num_sims)) {
+    idx <- (run - 1) * n_w + i
+    
+    # read last Dth
+    preds_bsl_D_NFRS[[idx]]  <- get_N_lastL_mean(files_bsl_NFRS[[idx]],  wks, D)
+    preds_prps_D_NFRS[[idx]] <- get_N_lastL_mean(files_prps_NFRS[[idx]], wks, D)
+    
+    # read last Dth
+    actual_D[[idx]]     <- tail(data_NFRS[[run]]$case_true[1:wks], D)
+  }
+}
+
+# --- 3) Calculate according to different L --------------------------------------
 all_results_NFRS <- vector("list", length(last_lens))
 names(all_results_NFRS) <- paste0("last_", last_lens)
 
 for (li in seq_along(last_lens)) {
-  print(paste0("The ",li,"th simulations."))
   L <- last_lens[li]
-
+  
+  # for each time t and simulations
   metrics_prps_NFRS <- replicate(n_w, vector("list", num_sims), simplify = FALSE)
   metrics_bsl_NFRS  <- replicate(n_w, vector("list", num_sims), simplify = FALSE)
-
+  
   for (i in seq_along(n_weeks)) {
-    wks <- n_weeks[i]
     for (run in seq_len(num_sims)) {
       idx <- (run - 1) * n_w + i
-
-      pred_bsl  <- get_N_lastL_mean(files_bsl_NFRS[[idx]],  wks, L)
-      pred_prps <- get_N_lastL_mean(files_prps_NFRS[[idx]], wks, L)
-      actual    <- tail(data_NFRS[[run]]$case_true[1:wks], L)
-
-      metrics_bsl_NFRS[[i]][[run]]  <- error_metrics(pred_bsl,  actual)
-      metrics_prps_NFRS[[i]][[run]] <- error_metrics(pred_prps, actual)
+      
+      # tail the saved data
+      pred_bsl_L  <- tail(preds_bsl_D_NFRS[[idx]],  L)
+      pred_prps_L <- tail(preds_prps_D_NFRS[[idx]], L)
+      actual_L    <- tail(actual_D[[idx]],     L)
+      
+      metrics_bsl_NFRS[[i]][[run]]  <- error_metrics(pred_bsl_L,  actual_L)
+      metrics_prps_NFRS[[i]][[run]] <- error_metrics(pred_prps_L, actual_L)
     }
   }
-
+  
+  # combine
   out <- data.frame(
     last_len = L,
     n_weeks  = n_weeks,
-    prps_RMSE  = NA, prps_RMSPE = NA, prps_MAE = NA, prps_MAPE = NA,
-    bsl_RMSE   = NA, bsl_RMSPE  = NA, bsl_MAE  = NA, bsl_MAPE  = NA
+    prps_RMSE  = NA_real_, prps_RMSPE = NA_real_, prps_MAE = NA_real_, prps_MAPE = NA_real_,
+    bsl_RMSE   = NA_real_, bsl_RMSPE  = NA_real_, bsl_MAE  = NA_real_, bsl_MAPE  = NA_real_
   )
+  
   for (i in seq_along(n_weeks)) {
-    prps_list_NFRS <- metrics_prps_NFRS[[i]]
-    bsl_list_NFRS  <- metrics_bsl_NFRS[[i]]
-
-    out$prps_RMSE[i]  <- mean(sapply(prps_list_NFRS, `[[`, "RMSE"))
-    out$prps_RMSPE[i] <- mean(sapply(prps_list_NFRS, `[[`, "RMSPE"))
-    out$prps_MAE[i]   <- mean(sapply(prps_list_NFRS, `[[`, "MAE"))
-    out$prps_MAPE[i]  <- mean(sapply(prps_list_NFRS, `[[`, "MAPE"))
-
-    out$bsl_RMSE[i]   <- mean(sapply(bsl_list_NFRS,  `[[`, "RMSE"))
-    out$bsl_RMSPE[i]  <- mean(sapply(bsl_list_NFRS,  `[[`, "RMSPE"))
-    out$bsl_MAE[i]    <- mean(sapply(bsl_list_NFRS,  `[[`, "MAE"))
-    out$bsl_MAPE[i]   <- mean(sapply(bsl_list_NFRS,  `[[`, "MAPE"))
+    prps_list <- metrics_prps_NFRS[[i]]
+    bsl_list  <- metrics_bsl_NFRS[[i]]
+    
+    # metrics
+    get_vec <- function(lst, nm) vapply(lst, function(x) x[[nm]], numeric(1L))
+    out$prps_RMSE[i]  <- mean(get_vec(prps_list, "RMSE"),  na.rm = TRUE)
+    out$prps_RMSPE[i] <- mean(get_vec(prps_list, "RMSPE"), na.rm = TRUE)
+    out$prps_MAE[i]   <- mean(get_vec(prps_list, "MAE"),   na.rm = TRUE)
+    out$prps_MAPE[i]  <- mean(get_vec(prps_list, "MAPE"),  na.rm = TRUE)
+    
+    out$bsl_RMSE[i]   <- mean(get_vec(bsl_list, "RMSE"),   na.rm = TRUE)
+    out$bsl_RMSPE[i]  <- mean(get_vec(bsl_list, "RMSPE"),  na.rm = TRUE)
+    out$bsl_MAE[i]    <- mean(get_vec(bsl_list, "MAE"),    na.rm = TRUE)
+    out$bsl_MAPE[i]   <- mean(get_vec(bsl_list, "MAPE"),   na.rm = TRUE)
   }
-
+  
   all_results_NFRS[[li]] <- out
 }
 
@@ -396,6 +413,18 @@ final_long_NFRS <- final_tbl_NFRS %>%
 
 final_long_NFRS
 
+## check NAs
+# check the NAs out of all sims
+bsl_has_na_NFRS  <- vapply(preds_bsl_D_NFRS,  anyNA, logical(1))
+prps_has_na_NFRS <- vapply(preds_prps_D_NFRS, anyNA, logical(1))  
+
+data.frame(
+  model    = c("bsl", "prps"),
+  total    = c(length(preds_bsl_D_NFRS), length(preds_prps_D_NFRS)),
+  with_NA  = c(sum(bsl_has_na_NFRS), sum(prps_has_na_NFRS)),
+  na_prop  = c(mean(bsl_has_na_NFRS), mean(prps_has_na_NFRS))
+)
+
 ```
 
 
@@ -406,7 +435,6 @@ final_long_NFRS
 all_crps_NFRS <- vector("list", length(last_lens))
 names(all_crps_NFRS) <- paste0("last_", last_lens)
 
-# NEW: containers for coverage
 all_cr50_NFRS <- vector("list", length(last_lens))
 all_cr95_NFRS <- vector("list", length(last_lens))
 names(all_cr95_NFRS) <- names(all_cr50_NFRS) <- names(all_crps_NFRS)
@@ -478,7 +506,7 @@ for (li in seq_along(last_lens)) {
     diff_bsl_minus_prps = cr50_bsl - cr50_prps
   )
   
-  # NEW: 95% coverage
+  #  95% coverage
   all_cr95_NFRS[[li]] <- data.frame(
     last_len  = L,
     n_weeks   = n_weeks,
@@ -498,8 +526,109 @@ final_NFRS <- rbind(final_crps_tbl_NFRS, final_cr50_tbl_NFRS, final_cr95_tbl_NFR
 rownames(final_NFRS) <- NULL
 print(final_NFRS)
 
-
 ```
+
+```{r}
+library(matrixStats)
+maxL <- max(last_lens)
+
+# make the list for simulations
+idx_df <- tidyr::expand_grid(run = seq_len(num_sims), i = seq_along(n_weeks)) %>%
+  mutate(wks = n_weeks[i], idx = (run - 1) * length(n_weeks) + i)
+
+# to store the sample 
+cache_prps <- vector("list", nrow(idx_df))
+cache_bsl  <- vector("list", nrow(idx_df))
+
+for (r in seq_len(nrow(idx_df))) {
+  wks <- idx_df$wks[r]; id <- idx_df$idx[r]
+  cache_prps[[r]] <- get_last_maxL_draws(files_prps_NFRS[[id]], wks, maxL)
+  cache_bsl[[r]]  <- get_last_maxL_draws(files_bsl_NFRS[[id]],  wks, maxL)
+}
+
+# store the results
+all_crps <- vector("list", length(last_lens))
+all_cr50 <- vector("list", length(last_lens))
+all_cr95 <- vector("list", length(last_lens))
+names(all_crps) <- names(all_cr50) <- names(all_cr95) <- paste0("last_", last_lens)
+
+for (li in seq_along(last_lens)) {
+  L <- last_lens[li]
+  crps_prps <- numeric(length(n_weeks))
+  crps_bsl  <- numeric(length(n_weeks))
+  cr50_prps <- numeric(length(n_weeks))
+  cr50_bsl  <- numeric(length(n_weeks))
+  cr95_prps <- numeric(length(n_weeks))
+  cr95_bsl  <- numeric(length(n_weeks))
+  
+  for (i in seq_along(n_weeks)) {
+    wks <- n_weeks[i]
+    # initialize
+    tmp_prps      <- rep(NA_real_, num_sims)
+    tmp_bsl       <- rep(NA_real_, num_sims)
+    tmp_cr50_prps <- rep(NA_real_, num_sims)
+    tmp_cr50_bsl  <- rep(NA_real_, num_sims)
+    tmp_cr95_prps <- rep(NA_real_, num_sims)
+    tmp_cr95_bsl  <- rep(NA_real_, num_sims)
+    
+    for (run in seq_len(num_sims)) {
+      r <- (run - 1) * length(n_weeks) + i          # 
+      Mpr <- cache_prps[[r]]
+      Mbs <- cache_bsl[[r]]
+      if (is.null(Mpr) || is.null(Mbs)) next        # drop NAs
+      
+      # take last N rows
+      MprL <- tail(Mpr, L)
+      MbsL <- tail(Mbs, L)
+      
+      y_true <- tail(data_NFRS[[run]]$case_true[1:wks], L)
+      
+      # CRPS：take the average 
+      tmp_prps[run] <- mean(scoringRules::crps_sample(y = y_true, dat = MprL))
+      tmp_bsl[run]  <- mean(scoringRules::crps_sample(y = y_true, dat = MbsL))
+      
+      # CR
+      tmp_cr50_prps[run] <- coverage_rate_sample_fast(y_true, MprL, level = 0.50)
+      tmp_cr50_bsl[run]  <- coverage_rate_sample_fast(y_true, MbsL, level = 0.50)
+      tmp_cr95_prps[run] <- coverage_rate_sample_fast(y_true, MprL, level = 0.95)
+      tmp_cr95_bsl[run]  <- coverage_rate_sample_fast(y_true, MbsL, level = 0.95)
+    }
+    
+    # mean of each run
+    crps_prps[i] <- mean(tmp_prps, na.rm = TRUE)
+    crps_bsl[i]  <- mean(tmp_bsl,  na.rm = TRUE)
+    cr50_prps[i] <- mean(tmp_cr50_prps, na.rm = TRUE)
+    cr50_bsl[i]  <- mean(tmp_cr50_bsl,  na.rm = TRUE)
+    cr95_prps[i] <- mean(tmp_cr95_prps, na.rm = TRUE)
+    cr95_bsl[i]  <- mean(tmp_cr95_bsl,  na.rm = TRUE)
+  }
+  
+  # table result
+  all_crps[[li]] <- data.frame(
+    last_len = L, n_weeks = n_weeks, metric = "CRPS",
+    prps = crps_prps, bsl = crps_bsl,
+    diff_bsl_minus_prps = crps_bsl - crps_prps
+  )
+  all_cr50[[li]] <- data.frame(
+    last_len = L, n_weeks = n_weeks, metric = "CR50",
+    prps = cr50_prps, bsl = cr50_bsl,
+    diff_bsl_minus_prps = cr50_bsl - cr50_prps
+  )
+  all_cr95[[li]] <- data.frame(
+    last_len = L, n_weeks = n_weeks, metric = "CR95",
+    prps = cr95_prps, bsl = cr95_bsl,
+    diff_bsl_minus_prps = cr95_bsl - cr95_prps
+  )
+}
+
+final_crps_tbl_NFRS <- do.call(rbind, all_crps)
+final_cr50_tbl_NFRS <- do.call(rbind, all_cr50)
+final_cr95_tbl_NFRS <- do.call(rbind, all_cr95)
+final_NFRS <- rbind(final_crps_tbl_NFRS, final_cr50_tbl_NFRS, final_cr95_tbl_NFRS)
+rownames(final_NFRS) <- NULL
+print(final_NFRS)
+```
+
 
 # generate table for plots
 ```{r}
