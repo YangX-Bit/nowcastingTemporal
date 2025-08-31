@@ -635,7 +635,7 @@ print(final_NFRS)
 library(tibble)
 
 # Pick one replicate and CI levels
-m <- 1
+m <- 5
 ci_levels <- c(0.5, 0.95)
 
 # NFRS
