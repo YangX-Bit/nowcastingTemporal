@@ -35,12 +35,12 @@ path_source_denguetracker_GT <- file.path(path_source_denguetracker_data, "gtren
 # Parameter settings
 ```{r}
 delay_D <- 15
-iter_sampling <- 5000
-iter_warmup <- 2000
+iter_sampling <- 2500
+iter_warmup <- 1000
 window_length <- 10
-thin <- 2
-step_size <- 1
-chain_num <- 1
+thin <- 1
+step_size <- 5
+chain_num <- 4
  
 ew_start <- "202410"
 ew_end <- "202436"
@@ -168,8 +168,8 @@ results_wGT <- run_moving_window(
   posterior_draws_path = file.path(path_proj, "draws", "length8")
 )
 
-arabm <- extract_N_summary(results1, num_N = 6)
-arabm_wGT <- extract_N_summary(results_wGT1, num_N = 6, model_name = "ARABMwGT")
+arabm <- extract_N_summary(results, num_N = 6)
+arabm_wGT <- extract_N_summary(results_wGT, num_N = 6, model_name = "ARABMwGT")
 
 results1 <- tail(results,10)
 results_wGT1 <- tail(results_wGT,10)
@@ -231,7 +231,7 @@ ARABM_metrics
 ARABMwGT_metrics
 ```
 ```{r}
-num_head <- 1
+num_head <- 5
 
 
 Bastos_metrics <- error_metrics(head(result_out_cut$cases_est_id,num_head), 
@@ -253,245 +253,4 @@ ARABMwGT_metrics
 result_out_cut$sum_of_cases_final
 ```
 
-# Fixed window: window length = 6
-```{r}
-results_length6 <- run_moving_window(
-  root_dir_infodengue = path_source_denguetracker_infodengue,
-  root_dir_GT = path_source_denguetracker_GT,
-  state = "RJ",
-  full_start = ew_start,
-  full_end = ew_end,
-  window_length = 6,
-  step_size = step_size,
-  D = delay_D,
-  hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
-                    alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
-  model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
-  model_name = "ARABM",
-  mode = "fixed",
-  iter_sampling = iter_sampling,
-  iter_warmup = iter_warmup,
-  chains = 3,
-  posterior_draws_path = file.path(path_proj, "draws", "length6")
-)
-
-results_wGT_length6 <- run_moving_window(
-  root_dir_infodengue = path_source_denguetracker_infodengue,
-  root_dir_GT = path_source_denguetracker_GT,
-  state = "RJ",
-  full_start = ew_start, 
-  full_end = ew_end,
-  window_length = 6,
-  step_size = step_size,
-  D = delay_D,
-  hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
-                    alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
-  model_file = file.path(path_source, "models", "b-ou-GT.stan"),
-  model_name = "ARABMwGT",
-  mode = "fixed",
-  iter_sampling = iter_sampling,
-  iter_warmup = iter_warmup,
-  chains = 3,
-  posterior_draws_path = file.path(path_proj, "draws", "length6")
-)
-
-arabm_length6 <- extract_N_summary(results_length6, num_N = 1)
-arabm_wGT_length6 <- extract_N_summary(results_wGT_length6, num_N = 1, model_name = "ARABMwGT")
-
-```
-
-```{r}
-result_out_length6 <- baseline %>%
-  left_join(
-    arabm_length6 %>% select(ew_now, ew, ARABM, ARABM_lwr, ARABM_upr),
-    by = c("ew_now", "ew")
-  ) %>%
-  left_join(
-    arabm_wGT_length6 %>% select(ew_now, ew, ARABMwGT, ARABMwGT_lwr, ARABMwGT_upr),
-    by = c("ew_now", "ew")
-  ) 
-
-result_out_length6 <- add_actual_cases(result_out_length6, 
-                               root_dir_infodengue = path_source_denguetracker_infodengue,
-                               "RJ",
-                               202511)
-result_out_length6 <- result_out_length6 %>%
-  filter(!is.na(ARABM))
-
-
-
-Bastos_metrics_length6 <- error_metrics(result_out_length6$cases_est_id, result_out_length6$sum_of_cases_final)
-GT_metrics_length6 <- error_metrics(result_out_length6$GT, result_out_length6$sum_of_cases_final)
-ARABM_metrics_length6 <- error_metrics(result_out_length6$ARABM, result_out_length6$sum_of_cases_final)
-ARABMwGT_metrics_length6 <- error_metrics(result_out_length6$ARABMwGT, result_out_length6$sum_of_cases_final)
-
-Bastos_metrics_length6
-GT_metrics_length6 
-ARABM_metrics_length6
-ARABMwGT_metrics_length6
-
-```
-
-
-# Fixed window: window length = 5
-```{r}
-results_length5 <- run_moving_window(
-  root_dir_infodengue = path_source_denguetracker_infodengue,
-  root_dir_GT = path_source_denguetracker_GT,
-  state = c("RJ","AC"),
-  full_start = ew_start,
-  full_end = ew_end,
-  window_length = 5,
-  step_size = step_size,
-  D = delay_D,
-  hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
-                    alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
-  model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
-  model_name = "ARABM",
-  mode = "fixed",
-  iter_sampling = iter_sampling,
-  iter_warmup = iter_warmup,
-  chains = 3,
-  posterior_draws_path = file.path(path_proj, "draws", "length5")
-)
-
-results_wGT_length5 <- run_moving_window(
-  root_dir_infodengue = path_source_denguetracker_infodengue,
-  root_dir_GT = path_source_denguetracker_GT,
-  state = c("RJ","AC"),,
-  full_start = ew_start, 
-  full_end = ew_end,
-  window_length = 5,
-  step_size = step_size,
-  D = delay_D,
-  hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
-                    alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
-  model_file = file.path(path_source, "models", "b-ou-GT.stan"),
-  model_name = "ARABMwGT",
-  mode = "fixed",
-  iter_sampling = iter_sampling,
-  iter_warmup = iter_warmup,
-  chains = 3,
-  posterior_draws_path = file.path(path_proj, "draws", "length5")
-)
-
-arabm_length5 <- extract_N_summary(results_length5, num_N = 1)
-arabm_wGT_length5 <- extract_N_summary(results_wGT_length5, num_N = 1, model_name = "ARABMwGT")
-
-```
-
-```{r}
-result_out_length5 <- baseline %>%
-  left_join(
-    arabm_length5 %>% select(ew_now, ew, ARABM, ARABM_lwr, ARABM_upr),
-    by = c("ew_now", "ew")
-  ) %>%
-  left_join(
-    arabm_wGT_length5 %>% select(ew_now, ew, ARABMwGT, ARABMwGT_lwr, ARABMwGT_upr),
-    by = c("ew_now", "ew")
-  ) 
-
-result_out_length5 <- add_actual_cases(result_out_length5, 
-                               root_dir_infodengue = path_source_denguetracker_infodengue,
-                               "RJ",
-                               202511)
-result_out_length5 <- result_out_length5 %>%
-  filter(!is.na(ARABM))
-
-
-
-Bastos_metrics_length5 <- error_metrics(result_out_length5$cases_est_id, result_out_length5$sum_of_cases_final)
-GT_metrics_length5 <- error_metrics(result_out_length5$GT, result_out_length5$sum_of_cases_final)
-ARABM_metrics_length5 <- error_metrics(result_out_length5$ARABM, result_out_length5$sum_of_cases_final)
-ARABMwGT_metrics_length5 <- error_metrics(result_out_length5$ARABMwGT, result_out_length5$sum_of_cases_final)
-
-Bastos_metrics_length5
-GT_metrics_length5 
-ARABM_metrics_length5
-ARABMwGT_metrics_length5
-
-```
-
-# Fixed window: window length = 4
-```{r}
-results_length4 <- run_moving_window(
-  root_dir_infodengue = path_source_denguetracker_infodengue,
-  root_dir_GT = path_source_denguetracker_GT,
-  state = "RJ",
-  full_start = ew_start,
-  full_end = ew_end,
-  window_length = 4,
-  step_size = step_size,
-  D = 15,
-  hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
-                    alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
-  model_file = file.path(path_source_nowcasting, "models", "b-ou.stan"),
-  model_name = "ARABM",
-  mode = "fixed",
-  iter_sampling = 2000,
-  iter_warmup = 500,
-  chains = 3,
-  posterior_draws_path = file.path(path_proj, "draws", "length4")
-)
-
-results_wGT_length4 <- run_moving_window(
-  root_dir_infodengue = path_source_denguetracker_infodengue,
-  root_dir_GT = path_source_denguetracker_GT,
-  state = "RJ",
-  full_start = ew_start, 
-  full_end = ew_end,
-  window_length = 4,
-  step_size = step_size,
-  D = 15,
-  hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
-                    alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
-  model_file = file.path(path_source, "models", "b-ou-GT.stan"),
-  model_name = "ARABMwGT",
-  mode = "fixed",
-  iter_sampling = 2000,
-  iter_warmup = 500,
-  chains = 3,
-  posterior_draws_path = file.path(path_proj, "draws", "length4")
-)
-
-arabm_length4 <- extract_N_summary(results_length4, num_N = 1)
-arabm_wGT_length4 <- extract_N_summary(results_wGT_length4, num_N = 1, model_name = "ARABMwGT")
-
-```
-
-```{r}
-result_out_length4 <- baseline %>%
-  left_join(
-    arabm_length4 %>% select(ew_now, ew, ARABM, ARABM_lwr, ARABM_upr),
-    by = c("ew_now", "ew")
-  ) %>%
-  left_join(
-    arabm_wGT_length4 %>% select(ew_now, ew, ARABMwGT, ARABMwGT_lwr, ARABMwGT_upr),
-    by = c("ew_now", "ew")
-  ) 
-
-result_out_length4 <- add_actual_cases(result_out_length4, 
-                               root_dir_infodengue = path_source_denguetracker_infodengue,
-                               "RJ",
-                               202511)
-result_out_length4 <- result_out_length4 %>%
-  filter(!is.na(ARABM))
-
-
-
-Bastos_metrics_length4 <- error_metrics(result_out_length4$cases_est_id, result_out_length4$sum_of_cases_final)
-GT_metrics_length4 <- error_metrics(result_out_length4$GT, result_out_length4$sum_of_cases_final)
-ARABM_metrics_length4 <- error_metrics(result_out_length4$ARABM, result_out_length4$sum_of_cases_final)
-ARABMwGT_metrics_length4 <- error_metrics(result_out_length4$ARABMwGT, result_out_length4$sum_of_cases_final)
-
-Bastos_metrics_length4
-GT_metrics_length4 
-ARABM_metrics_length4
-ARABMwGT_metrics_length4
-
-```
-
-```{r}
-save(out_b_constant_FR_multi, file = file.path(data_save_path, "FR_b_constant_multi.RData"))
-```
 

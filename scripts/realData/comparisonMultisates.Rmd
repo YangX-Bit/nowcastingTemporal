@@ -37,11 +37,11 @@ posterior_draws_path = file.path(dirname(path_proj),"draws")
 ```
 # Parameter settings
 ```{r}
-delay_D <- 10
+delay_D <- 15
 iter_sampling <- 5000
 iter_warmup <- 2000
 window_length <- 10
-step_size <- 3
+step_size <- 9
 
 ew_start <- "202410"
 ew_end <- "202452"
@@ -54,7 +54,8 @@ ew_end <- "202452"
  )
 
 # Test RJ (0.977), SP (0.972) (big cities), AP(0.7395), "RR" (0.5887), CE (0.8938)
-#brazil_ufs <- c("RJ", "SP", "AP", "RR")
+brazil_ufs <- c("RJ", "SP", "AP", "RR")
+brazil_ufs <- c("AC")
 ```
 
 
@@ -154,7 +155,7 @@ for (i in 1:length(brazil_ufs)) {
  }
 
 # save(baseline_list, file = file.path(path_proj, "data", "results", "baseline_list.RData"))
-load(file.path(path_proj, "data", "results", "baseline_list.RData"))
+#load(file.path(path_proj, "data", "results", "baseline_list.RData"))
 baseline_list
 ```
 
