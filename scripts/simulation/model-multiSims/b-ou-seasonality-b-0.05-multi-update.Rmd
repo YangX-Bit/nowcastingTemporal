@@ -170,6 +170,7 @@ if_show_messages = F
 ```{r}
 # use the same data from FR for the outbreak scenario
 lambda_seq_NFRS <- lambda_seq_FR
+set.seed(111)
 ```
 
 ## Non-fully reported scenario
