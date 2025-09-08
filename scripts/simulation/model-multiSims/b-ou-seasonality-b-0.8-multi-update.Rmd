@@ -627,25 +627,6 @@ print(final_FR)
 ```
 
 
-# generate table for plots
-```{r}
-library(tibble)
-# Pick one replicate and CI levels
-m <- 5
-ci_levels <- c(0.5, 0.95)
-
-# FR
-preds_result_FR <- make_run_summary_cumulative(
-  scenario_name = "FR",
-  run      = m,
-  n_weeks  = n_weeks,
-  base_L   = D,
-  levels   = ci_levels,
-  data_list = data_FR,
-  files_bsl = files_bsl_FR,
-  files_prps= files_prps_FR
-)
-```
 
 
 

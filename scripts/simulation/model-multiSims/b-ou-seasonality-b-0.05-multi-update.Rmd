@@ -25,6 +25,7 @@ source(file.path(path_source_nowcasting, "functions", "prior_function.R"))
 post_draws_path_NFRS = file.path(file.path(dirname(dirname(path_proj)),"projects","draws","NFRS"))
 
 source(file.path(path_proj, "source", "functions", "simulation_functions.R"))
+source(file.path(path_proj, "source", "functions", "metrics.R"))
 
 error_metrics <- function(predicted, actual) {
   ok <- is.finite(predicted) & is.finite(actual)
@@ -170,6 +171,7 @@ if_show_messages = F
 ```{r}
 # use the same data from FR for the outbreak scenario
 lambda_seq_NFRS <- lambda_seq_FR
+num_sims <- 50
 set.seed(111)
 ```
 
@@ -209,7 +211,7 @@ for (i in 1:num_sims) {
 
 ```
 
-### Model fitting
+### Model fitting·    
 
 ```{r, warning=F}
 t0_bsl_NFRS <- Sys.time()
@@ -430,105 +432,6 @@ data.frame(
 
 
 
-
-
-```{r}
-all_crps_NFRS <- vector("list", length(last_lens))
-names(all_crps_NFRS) <- paste0("last_", last_lens)
-
-all_cr50_NFRS <- vector("list", length(last_lens))
-all_cr95_NFRS <- vector("list", length(last_lens))
-names(all_cr95_NFRS) <- names(all_cr50_NFRS) <- names(all_crps_NFRS)
-
-for (li in seq_along(last_lens)) {
-  L <- last_lens[li]
-  
-  crps_prps <- numeric(length(n_weeks))
-  crps_bsl  <- numeric(length(n_weeks))
-  cr50_prps <- numeric(length(n_weeks))
-  cr50_bsl  <- numeric(length(n_weeks))
-  cr95_prps <- numeric(length(n_weeks))
-  cr95_bsl  <- numeric(length(n_weeks))
-  
-  for (i in seq_along(n_weeks)) {
-    wks <- n_weeks[i]
-    tmp_prps <- numeric(num_sims)
-    tmp_bsl  <- numeric(num_sims)
-    tmp_cr50_prps <- numeric(num_sims)
-    tmp_cr50_bsl  <- numeric(num_sims)
-    tmp_cr95_prps <- numeric(num_sims)
-    tmp_cr95_bsl  <- numeric(num_sims)
-    
-    for (run in seq_len(num_sims)) {
-      idx    <- (run - 1) * length(n_weeks) + i
-      y_true <- tail(data_NFRS[[run]]$case_true[1:wks], L)
-      
-      pred_prps <- get_N_lastL_draws(files_prps_NFRS[[idx]], wks, L)
-      pred_bsl  <- get_N_lastL_draws(files_bsl_NFRS[[idx]],  wks, L)
-      
-      # CRPS
-      tmp_prps[run] <- mean(crps_sample(y = y_true, dat = pred_prps))
-      tmp_bsl[run]  <- mean(crps_sample(y = y_true, dat = pred_bsl))
-      
-      # 50%
-      tmp_cr50_prps[run] <- coverage_rate_sample(y_true, pred_prps, level = 0.50)
-      tmp_cr50_bsl[run]  <- coverage_rate_sample(y_true, pred_bsl,  level = 0.50)
-      # 95%
-      tmp_cr95_prps[run] <- coverage_rate_sample(y_true, pred_prps, level = 0.95)
-      tmp_cr95_bsl[run]  <- coverage_rate_sample(y_true, pred_bsl,  level = 0.95)
-      
-      rm(pred_prps, pred_bsl); gc()
-    }
-    
-    crps_prps[i] <- mean(tmp_prps)
-    crps_bsl[i]  <- mean(tmp_bsl)
-    cr50_prps[i] <- mean(tmp_cr50_prps)
-    cr50_bsl[i]  <- mean(tmp_cr50_bsl)
-    cr95_prps[i] <- mean(tmp_cr95_prps)
-    cr95_bsl[i]  <- mean(tmp_cr95_bsl)
-  }
-  
-  # --- assemble data.frames ---
-  all_crps_NFRS[[li]] <- data.frame(
-    last_len  = L,
-    n_weeks   = n_weeks,
-    metric    = "CRPS",
-    prps      = crps_prps,
-    bsl       = crps_bsl,
-    diff_bsl_minus_prps = crps_bsl - crps_prps
-  )
-  
-  all_cr50_NFRS[[li]] <- data.frame(
-    last_len  = L,
-    n_weeks   = n_weeks,
-    metric    = "CR50",               
-    prps      = cr50_prps,            
-    bsl       = cr50_bsl,
-    diff_bsl_minus_prps = cr50_bsl - cr50_prps
-  )
-  
-  #  95% coverage
-  all_cr95_NFRS[[li]] <- data.frame(
-    last_len  = L,
-    n_weeks   = n_weeks,
-    metric    = "CR95",               
-    prps      = cr95_prps,
-    bsl       = cr95_bsl,
-    diff_bsl_minus_prps = cr95_bsl - cr95_prps
-  )
-}
-
-final_crps_tbl_NFRS  <- do.call(rbind, all_crps_NFRS)
-final_cr50_tbl_NFRS <- do.call(rbind, all_cr50_NFRS)
-final_cr95_tbl_NFRS <- do.call(rbind, all_cr95_NFRS)
-
-# Optionally combine:
-final_NFRS <- rbind(final_crps_tbl_NFRS, final_cr50_tbl_NFRS, final_cr95_tbl_NFRS)
-rownames(final_NFRS) <- NULL
-print(final_NFRS)
-
-```
-
 ```{r}
 library(matrixStats)
 maxL <- max(last_lens)
@@ -631,26 +534,7 @@ print(final_NFRS)
 ```
 
 
-# generate table for plots
-```{r}
-library(tibble)
 
-# Pick one replicate and CI levels
-m <- 5
-ci_levels <- c(0.5, 0.95)
-
-# NFRS
-preds_result_NFRS <- make_run_summary_cumulative(
-  scenario_name = "NFRS",
-  run      = m,
-  n_weeks  = n_weeks,
-  base_L   = D,
-  levels   = ci_levels,
-  data_list = data_NFRS,
-  files_bsl = files_bsl_NFRS,
-  files_prps= files_prps_NFRS
-)
-```
 
 ```{r}
 path_to_save_NFRS <- file.path(path_proj, "data", "simulation","results","NFRS")

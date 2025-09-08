@@ -25,6 +25,7 @@ source(file.path(path_source_nowcasting, "functions", "prior_function.R"))
 post_draws_path_NFRM = file.path(file.path(dirname(dirname(path_proj)),"projects","draws","NFRM"))
 
 source(file.path(path_proj, "source", "functions", "simulation_functions.R"))
+source(file.path(path_proj, "source", "functions", "metrics.R"))
 
 error_metrics <- function(predicted, actual) {
   ok <- is.finite(predicted) & is.finite(actual)
@@ -169,6 +170,7 @@ if_show_messages = F
 ```{r}
 # use the same data from FR for the outbreak scenario
 lambda_seq_NFRM <- lambda_seq_FR
+num_sims <- 50
 set.seed(111)
 ```
 
@@ -530,26 +532,6 @@ print(final_NFRM)
 
 ```
 
-# generate table for plots
-```{r}
-library(tibble)
-
-# Pick one replicate and CI levels
-m <- 5
-ci_levels <- c(0.5, 0.95)
-
-# NFRM
-preds_result_NFRM <- make_run_summary_cumulative(
-  scenario_name = "NFRM",
-  run      = m,
-  n_weeks  = n_weeks,
-  base_L   = D,
-  levels   = ci_levels,
-  data_list = data_NFRM,
-  files_bsl = files_bsl_NFRM,
-  files_prps= files_prps_NFRM
-)
-```
 
 ```{r}
 path_to_save_NFRM <- file.path(path_proj, "data", "simulation","results","NFRM")
