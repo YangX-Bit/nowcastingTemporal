@@ -160,9 +160,24 @@ df_plot <- preds_result %>%
   )
 
 # enforce left-to-right time order in facets (e.g., 53,66,79,92,104)
-levels_eval <- paste0("t = ", sort(unique(df_plot$eval_t)))
+# define ordered time points and labels
+eval_times    <- sort(unique(df_plot$eval_t))
+stage_labels  <- c("Initial", "Increasing", "Peak", "Decreasing", "Finish")
+
+# safety check
+stopifnot(length(eval_times) == length(stage_labels))
+
+# make label vector like "t = 53 (Initial)"
+eval_labels <- paste0("t = ", eval_times, " (", stage_labels, ")")
+
+# apply as factor
 df_plot <- df_plot %>%
-  mutate(eval_lab = factor(paste0("t = ", eval_t), levels = levels_eval))
+  mutate(
+    eval_lab = factor(
+      paste0("t = ", eval_t, " (", stage_labels[match(eval_t, eval_times)], ")"),
+      levels = eval_labels  # ensure correct order in facet
+    )
+  )
 
 # print(table(df_plot$scenario, df_plot$model, useNA = "ifany"))
 
