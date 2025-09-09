@@ -43,9 +43,9 @@ step_size <- 5
 chain_num <- 4
  
 ew_start <- "202410"
-ew_end <- "202436"
+ew_end <- "202430"
 
-state <- "RJ"
+state <- "AM"
 ```
 
 # Fourier basis
@@ -156,7 +156,7 @@ results_wGT <- run_moving_window(
   D = delay_D,
   hypers = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
                     alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
-  E =10000,
+  E =500,
   S = H_used *2,
   bases_s = fourier_basis[, 1:(H_used*2)],
   model_file = file.path(path_source, "models", "nowcast_hist_triangle.stan"),
@@ -213,7 +213,7 @@ ARABMwGT_metrics
 ```
 
 ```{r}
-num_tail <-3
+num_tail <- 3
 
 
 Bastos_metrics <- error_metrics(tail(result_out_cut$cases_est_id,num_tail), 

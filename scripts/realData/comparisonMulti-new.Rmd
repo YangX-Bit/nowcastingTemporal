@@ -1,0 +1,340 @@
+---
+title: "Multi_states_BR"
+author: "Yang Xiao"
+date: "2025-09-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(cmdstanr)
+library(bayesplot)
+```
+
+```{r}
+path_proj = here::here()
+path_source = file.path(path_proj, "source")
+
+source(file.path(path_source, "functions", "dengue_tracker_functions.R"))
+source(file.path(path_source, "functions", "tidy_dengueBR.R"))
+source(file.path(path_source, "functions", "fit_function.R"))
+aweek::set_week_start("Sunday")
+
+path_source_nowcasting <- file.path(dirname(path_proj), "nowcasting", "source")
+source(file.path(path_source_nowcasting, "simulation", "simulations_functions_final.R"))
+source(file.path(path_source_nowcasting, "functions", "prior_function.R"))
+source(file.path(path_source_nowcasting, "functions", "fit_function.R"))
+source(file.path(path_source_nowcasting, "functions", "plot_function.R"))
+
+path_source_denguetracker_data <- file.path(dirname(path_proj), "dengue-tracker/data/weekly_data/")
+path_source_denguetracker_infodengue <- file.path(path_source_denguetracker_data, "infodengue")
+path_source_denguetracker_GT <- file.path(path_source_denguetracker_data, "gtrends")
+```
+
+
+```{r}
+brazil_ufs <- c(
+  "AC", "AL", "AP", "AM",
+  "BA", "CE", "DF", "ES",
+  "GO", "MA", "MT", "MS",
+  "MG", "PA", "PB", "PR",
+  "PE", "PI", "RJ", "RN",
+  "RS", "RO", "RR", "SC",
+  "SP", "SE", "TO"
+)
+
+case_data <- list()
+case_date <- tail(readr::read_csv(file.path(path_source_denguetracker_infodengue,
+                                             202519,paste0("AC","_","2025-05-11","_infodengue.csv"))),62)$ew_start
+for (i in 1:length(brazil_ufs)) {
+  case_data[[brazil_ufs[i]]] <- tail(readr::read_csv(file.path(path_source_denguetracker_infodengue,
+                                             202519,paste0(brazil_ufs[i],"_","2025-05-11","_infodengue.csv"))),62)$sum_of_cases  
+}
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(readr)
+# transfer the data
+case_df <- map_dfr(names(case_data), function(uf) {
+  tibble(
+    date = case_date,
+    cases = case_data[[uf]],
+    uf = uf
+  )
+})
+
+
+ggplot(case_df, aes(x = date, y = cases, color = uf)) +
+  geom_line(size = 1) +
+  geom_vline(xintercept = as.Date("2024-07-01"), 
+             linetype = "dashed", color = "black", size = 0.8) +
+  labs(title = NULL,
+       x = "Date", y = "Number of Cases") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+```
+
+```{r}
+ggplot(case_df, aes(x = date, y = cases)) +
+  geom_line(color = "steelblue", size = 0.8) +
+  geom_vline(xintercept = as.Date("2024-07-28"), 
+             linetype = "dashed", color = "black", size = 0.8) +
+  facet_wrap(~ uf, scales = "free_y", ncol = 6) +
+  labs(title = "Dengue Case Trends per State",
+       x = "Date", y = "Number of Cases") +
+  theme_minimal(base_size = 12) +
+  theme(strip.text = element_text(face = "bold"))
+
+exposure <- case_df %>% group_by(uf) %>% mutate(exposure = max(cases)/3)%>%
+  select(uf,exposure) %>% unique()
+
+```
+
+## the test
+### function
+```{r}
+# 更稳健的误差函数（避免 actual = 0 时除零）
+safe_rmspe <- function(pred, actual, eps = 1e-8) {
+  sqrt(mean(((pred - actual) / pmax(actual, eps))^2, na.rm = TRUE)) * 100
+}
+safe_mape <- function(pred, actual, eps = 1e-8) {
+  mean(abs((pred - actual) / pmax(actual, eps)), na.rm = TRUE) * 100
+}
+rmse_fun <- function(pred, actual) sqrt(mean((pred - actual)^2, na.rm = TRUE))
+mae_fun  <- function(pred, actual) mean(abs(pred - actual), na.rm = TRUE)
+
+# 覆盖率
+coverage_rate <- function(truth, lwr, upr) {
+  mean(truth >= lwr & truth <= upr, na.rm = TRUE)
+}
+
+# 基于正态近似的 CRPS（用 95% 区间反推 σ，再计算 CRPS(N(μ,σ), y)）
+crps_normal_vec <- function(y, mu, lwr95, upr95) {
+  z975 <- qnorm(0.975)
+  sigma <- (upr95 - lwr95) / (2 * z975)
+  # 避免 sigma = 0
+  sigma <- pmax(sigma, 1e-8)
+  z <- (y - mu) / sigma
+  # φ 和 Φ
+  phi <- dnorm(z)
+  Phi <- pnorm(z)
+  # CRPS 公式：σ [ 1/√π - 2 φ(z) - z(2Φ(z)-1) ]
+  crps <- sigma * (1 / sqrt(pi) - 2 * phi - z * (2 * Phi - 1))
+  mean(crps, na.rm = TRUE)
+}
+
+# 由 95% 区间近似出 50% 区间（正态：μ ± z0.75 * σ）
+make_50_ci_from_95 <- function(mu, lwr95, upr95) {
+  z975 <- qnorm(0.975)
+  z075 <- qnorm(0.75)  # 0.6744898
+  sigma <- (upr95 - lwr95) / (2 * z975)
+  sigma <- pmax(sigma, 1e-8)
+  lwr50 <- mu - z075 * sigma
+  upr50 <- mu + z075 * sigma
+  list(lwr50 = lwr50, upr50 = upr50)
+}
+
+generate_fourier_basis <- function(weeks, H_max = 3, period = 52) {
+  if (inherits(weeks, "Date")) {
+    weeks <- seq_along(weeks)
+  }
+  
+  angle <- 2 * pi * (weeks - 1) / period
+  
+  fourier_list <- lapply(1:H_max, function(h) {
+    cbind(
+      cos = cos(h * angle),
+      sin = sin(h * angle)
+    )
+  })
+  
+  basis <- do.call(cbind, fourier_list)
+  
+  # colnames
+  colnames(basis) <- unlist(lapply(1:H_max, function(h) {
+    c(paste0("cos_h", h), paste0("sin_h", h))
+  }))
+  
+  return(basis)
+}
+
+error_metrics <- function(predicted, actual) {
+  # same length
+  stopifnot(length(predicted) == length(actual))
+  
+  # RMSE (Root Mean Squared Error)
+  rmse <- sqrt(mean((predicted - actual)^2))
+  
+  # RMSPE (Root Mean Squared Percentage Error)
+  rmspe <- sqrt(mean(((predicted - actual)/actual)^2)) * 100
+  
+  # MAE (Mean Absolute Error)
+  mae <- mean(abs(predicted - actual))
+  
+  # MAPE (Mean Absolute Percentage Error)
+  mape <- mean(abs((predicted - actual)/actual)) * 100
+
+  list(RMSE = rmse,
+       RMSPE = rmspe,
+       MAE = mae,
+       MAPE = mape)
+}
+
+```
+
+```{r}
+# 拆分保存目录
+fit_dir <- file.path(path_proj, "outputs", "fits")
+dir.create(fit_dir, recursive = TRUE, showWarnings = FALSE)
+
+weeks_per_yr <- 52
+t <- 1:(weeks_per_yr * 3)
+fourier_basis <- generate_fourier_basis(t, H_max = 10, period = weeks_per_yr)
+H_used <- 3
+
+# 你希望批量跑的州 & 对应的 E（与州一一对应）
+all_states <- c("RJ", "MT", "AM")        # 示例；请改成你的 20+ 个州
+E_vec      <- c(10000, 1000, 500)     # 与州一一对应
+include_GT <- FALSE                      # 是否在 metrics 表中包含 GT 指标
+
+delay_D <- 15
+iter_sampling <- 2500
+iter_warmup <- 1000
+window_length <- 10
+thin <- 1
+step_size <- 5
+chain_num <- 4
+
+ew_start <- "202410"
+ew_end <- "202430"
+```
+
+
+# MCMC
+
+```{r}
+for (i in seq_along(all_states)) {
+  state_i <- all_states[i]
+  E_val   <- E_vec[i]
+  cat(sprintf(">>> [MCMC %d/%d] State = %s ...\n", i, length(all_states), state_i))
+  
+  # baseline（含真实值）
+  baseline_i <- get_baseline_data(
+    root_dir = path_source_denguetracker_data,
+    states   = state_i,
+    start    = ew_start,
+    end      = ew_end,
+    time_unit = "week",
+    last_n   = 10
+  ) %>%
+    add_actual_cases(root_dir_infodengue = path_source_denguetracker_infodengue,
+                     state = state_i,
+                     202511)
+  saveRDS(baseline_i, file.path(fit_dir, sprintf("%s_baseline.rds", state_i)))
+  
+  # 模型 1：ARABM（不含 GT）
+  results_i <- run_moving_window(
+    root_dir_infodengue = path_source_denguetracker_infodengue,
+    root_dir_GT         = path_source_denguetracker_GT,
+    state               = state_i,
+    full_start          = ew_start,
+    full_end            = ew_end,
+    step_size           = step_size,
+    D                   = delay_D,
+    hypers              = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
+                                   alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
+    model_file          = file.path(path_source_nowcasting, "models", "b-ou.stan"),
+    model_name          = "ARABM",
+    mode                = "expanding",
+    iter_sampling       = iter_sampling,
+    iter_warmup         = iter_warmup,
+    chains              = chain_num,
+    posterior_draws_path = file.path(path_proj, "draws", "length8")
+  )
+  saveRDS(results_i, file.path(fit_dir, sprintf("%s_ARABM_fit.rds", state_i)))
+  
+  # 模型 2：ARABMwGT（含 GT + seasonality + E）
+  results_wGT_i <- run_moving_window(
+    root_dir_infodengue = path_source_denguetracker_infodengue,
+    root_dir_GT         = path_source_denguetracker_GT,
+    state               = state_i,
+    full_start          = ew_start,
+    full_end            = ew_end,
+    step_size           = step_size,
+    D                   = delay_D,
+    hypers              = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
+                                   alpha_phi = 1.4, sd_log_b = 1, delay_seq = 0:15),
+    E                   = E_val,
+    S                   = H_used * 2,
+    bases_s             = fourier_basis[, 1:(H_used * 2)],
+    model_file          = file.path(path_source, "models", "nowcast_hist_triangle.stan"),
+    model_name          = "ARABMwGT",
+    mode                = "expanding",
+    iter_sampling       = iter_sampling,
+    iter_warmup         = iter_warmup,
+    chains              = chain_num,
+    posterior_draws_path = file.path(path_proj, "draws", "length8")
+  )
+  saveRDS(results_wGT_i, file.path(fit_dir, sprintf("%s_ARABMwGT_fit.rds", state_i)))
+  
+}
+```
+
+# tools
+```{r}
+get_last_N_components <- function(fit, L) {
+  dr  <- fit$draws(variables = "N", inc_warmup = FALSE)
+  dm  <- posterior::as_draws_matrix(dr)  # rows = draws, cols = N[1], N[2], ...
+  vars <- colnames(dm)
+  n_cols <- grep("^N\\[\\d+\\]$", vars, value = TRUE)
+  if (length(n_cols) == 0L) stop("N appears to be scalar; no indexed components found.")
+  idx <- as.integer(sub("^N\\[(\\d+)\\]$", "\\1", n_cols))
+  n_cols <- n_cols[order(idx)]
+  keep <- tail(n_cols, min(L, length(n_cols)))
+  dm[, keep, drop = FALSE]
+}
+
+# 2) 从 baseline_i 构建每个 ew_now 的真值序列（按 ew 升序收集）
+build_truth_by_i <- function(baseline_df) {
+  out <- baseline_df %>%
+    filter(!is.na(sum_of_cases_final)) %>%
+    mutate(ew = as.numeric(ew)) %>%
+    arrange(ew_now, ew) %>%
+    group_by(ew_now) %>%
+    summarize(truth = list(sum_of_cases_final), .groups = "drop")
+  truth_list <- out$truth
+  names(truth_list) <- as.character(out$ew_now)
+  truth_list
+}
+
+# 3) 快速覆盖率：dat 行=时间点，列=样本；若列=时间点则自动转置
+
+coverage_rate_sample <- function(y, dat, level = 0.95) {
+  stopifnot(is.numeric(y), length(y) > 0)
+  if (is.null(dim(dat))) stop("`dat` must be a matrix/data.frame of draws.")
+  M <- as.matrix(dat)
+  # Align shape so that columns correspond to time points
+  if (ncol(M) == length(y)) {
+    # ok
+  } else if (nrow(M) == length(y)) {
+    M <- t(M)
+  } else {
+    stop(sprintf("`dat` dims (%d x %d) not compatible with length(y) = %d",
+                 nrow(M), ncol(M), length(y)))
+  }
+  alpha  <- (1 - level)/2
+  lower  <- apply(M, 2, stats::quantile, probs = alpha,    na.rm = TRUE)
+  upper  <- apply(M, 2, stats::quantile, probs = 1 - alpha, na.rm = TRUE)
+  mean(y >= lower & y <= upper)
+}
+```
+
+```{r}
+
+```
+
