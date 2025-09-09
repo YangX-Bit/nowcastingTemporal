@@ -113,7 +113,7 @@ preds_result_FR <- make_run_summary_cumulative(
 
 # NFRM
 preds_result_NFRM <- make_run_summary_cumulative(
-  scenario_name = "NFRM",
+  scenario_name = "MNFR",
   run      = m,
   n_weeks  = n_weeks,
   base_L   = D,
@@ -126,7 +126,7 @@ preds_result_NFRM <- make_run_summary_cumulative(
 
 # NFRS
 preds_result_NFRS <- make_run_summary_cumulative(
-  scenario_name = "NFRS",
+  scenario_name = "SNFR",
   run      = m,
   n_weeks  = n_weeks,
   base_L   = D,
@@ -153,9 +153,9 @@ ucol        <- paste0("u", tag)
 
 # ---- filter & order ----
 df_plot <- preds_result %>%
-  filter(run == run_to_plot, scenario %in% c("FR","NFRM","NFRS")) %>%
+  filter(run == run_to_plot, scenario %in% c("FR","MNFR","SNFR")) %>%
   mutate(
-    scenario = factor(scenario, levels = c("FR","NFRM","NFRS")),
+    scenario = factor(scenario, levels = c("FR","MNFR","SNFR")),
     model    = factor(model, levels = c("Baseline","Proposed"))
   )
 
@@ -263,7 +263,46 @@ print(sims_result_plot)
 
 ggsave(filename = file.path(path_proj, "plots_to_show", "simulation", "sims-results.png"),
        plot = sims_result_plot,
-       width = 8, height = 6, dpi = 300)
+       width = 10, height = 8, dpi = 300)
 
+```
+
+# Realization of seasonality
+```{r}
+# centralized 
+s_t_centered <- s_t - mean(s_t)
+S_t <- exp(s_t_centered)
+
+df <- data.frame(
+  Week = 1:T_len,
+  Seasonality = S_t
+)
+
+p_s <- ggplot(df, aes(x = Week, y = Seasonality)) +
+  geom_line(size = 1, color = "black") +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+  scale_y_continuous(
+    name = "Seasonality multiplier",
+    limits = c(min(S_t) * 0.9, max(S_t) * 1.1),
+    expand = c(0, 0)
+  ) +
+  scale_x_continuous(
+    name = "Week",
+    breaks = seq(0, T, by = 13), # 按季度标
+    expand = c(0, 0)
+  ) +
+  theme_classic(base_size = 16) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    axis.line = element_line(color = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+print(p_s)
+ggsave(filename = file.path(path_proj, "plots_to_show", "simulation", "sims-seasonality.png"),
+       plot = p_s,
+       width = 10, height = 4, dpi = 300)
 ```
 

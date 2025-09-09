@@ -92,6 +92,7 @@ ggplot(case_df, aes(x = date, y = cases)) +
 
 exposure <- case_df %>% group_by(uf) %>% mutate(exposure = max(cases)/3)%>%
   select(uf,exposure) %>% unique()
+exposure <- exposure[-8,]
 
 ```
 

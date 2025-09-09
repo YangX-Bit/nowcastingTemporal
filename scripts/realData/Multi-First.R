@@ -6,6 +6,8 @@ library(purrr)
 library(tidyr)
 library(readr)
 
+path_to_draws_BR <- file.path(file.path(dirname(dirname(path_proj)),"projects","draws","BR"))
+
 # 更稳健的误差函数（避免 actual = 0 时除零）
 safe_rmspe <- function(pred, actual, eps = 1e-8) {
   sqrt(mean(((pred - actual) / pmax(actual, eps))^2, na.rm = TRUE)) * 100
@@ -97,15 +99,7 @@ all_states <- c(
   "RS", "RO", "RR", "SC",
   "SP", "SE", "TO"
 )       # 示例；请改成你的 20+ 个州
-E_vec      <- c(
-  "AC", "AL", "AP", "AM",
-  "BA", "CE", "DF", "ES",
-  "GO", "MA", "MT", "MS",
-  "MG", "PA", "PB", "PR",
-  "PE", "PI", "RJ", "RN",
-  "RS", "RO", "RR", "SC",
-  "SP", "SE", "TO"
-)      # 与州一一对应
+E_vec <- exposure$exposure    # 与州一一对应
 include_GT <- FALSE                      # 是否在 metrics 表中包含 GT 指标
 
 delay_D <- 15
@@ -159,7 +153,7 @@ for (i in seq_along(all_states)) {
     iter_sampling       = iter_sampling,
     iter_warmup         = iter_warmup,
     chains              = chain_num,
-    posterior_draws_path = file.path(path_proj, "draws", "length8")
+    posterior_draws_path = path_to_draws_BR
   )
   saveRDS(results_i, file.path(fit_dir, sprintf("%s_ARABM_fit.rds", state_i)))
   
@@ -183,7 +177,7 @@ for (i in seq_along(all_states)) {
     iter_sampling       = iter_sampling,
     iter_warmup         = iter_warmup,
     chains              = chain_num,
-    posterior_draws_path = file.path(path_proj, "draws", "length8")
+    posterior_draws_path = path_to_draws_BR
   )
   saveRDS(results_wGT_i, file.path(fit_dir, sprintf("%s_ARABMwGT_fit.rds", state_i)))
 }
