@@ -92,7 +92,7 @@ dir.create(fit_dir, recursive = TRUE, showWarnings = FALSE)
 # 你希望批量跑的州 & 对应的 E（与州一一对应）
 all_states <- c(
   "AC", "AL", "AP", "AM",
-  "BA", "CE", "DF", "ES",
+  "BA", "CE", "DF", #"ES",
   "GO", "MA", "MT", "MS",
   "MG", "PA", "PB", "PR",
   "PE", "PI", "RJ", "RN",
