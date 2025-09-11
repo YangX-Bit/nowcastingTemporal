@@ -18,6 +18,7 @@ path_source = file.path(path_proj, "source")
 source(file.path(path_source, "functions", "dengue_tracker_functions.R"))
 source(file.path(path_source, "functions", "tidy_dengueBR.R"))
 source(file.path(path_source, "functions", "fit_function.R"))
+source(file.path(path_source, "functions", "metrics.R"))
 aweek::set_week_start("Sunday")
 
 path_source_nowcasting <- file.path(dirname(path_proj), "nowcasting", "source")
@@ -298,60 +299,79 @@ suppressMessages(
         )
         saveRDS(results_wGT_i, file.path(fit_dir, sprintf("%s_ARABMwGT_fit.rds", state_i)))
       }
-      )
+      
     )
   )
 
 
 ```
 
-# tools
-```{r}
-get_last_N_components <- function(fit, L) {
-  dr  <- fit$draws(variables = "N", inc_warmup = FALSE)
-  dm  <- posterior::as_draws_matrix(dr)  # rows = draws, cols = N[1], N[2], ...
-  vars <- colnames(dm)
-  n_cols <- grep("^N\\[\\d+\\]$", vars, value = TRUE)
-  if (length(n_cols) == 0L) stop("N appears to be scalar; no indexed components found.")
-  idx <- as.integer(sub("^N\\[(\\d+)\\]$", "\\1", n_cols))
-  n_cols <- n_cols[order(idx)]
-  keep <- tail(n_cols, min(L, length(n_cols)))
-  dm[, keep, drop = FALSE]
-}
 
-# 2) 从 baseline_i 构建每个 ew_now 的真值序列（按 ew 升序收集）
-build_truth_by_i <- function(baseline_df) {
-  out <- baseline_df %>%
-    filter(!is.na(sum_of_cases_final)) %>%
-    mutate(ew = as.numeric(ew)) %>%
-    arrange(ew_now, ew) %>%
-    group_by(ew_now) %>%
-    summarize(truth = list(sum_of_cases_final), .groups = "drop")
-  truth_list <- out$truth
-  names(truth_list) <- as.character(out$ew_now)
-  truth_list
-}
+```{r, warning=F}
+interval_metrics_list <- list()
+L <- 4
 
-# 3) 快速覆盖率：dat 行=时间点，列=样本；若列=时间点则自动转置
-
-coverage_rate_sample <- function(y, dat, level = 0.95) {
-  stopifnot(is.numeric(y), length(y) > 0)
-  if (is.null(dim(dat))) stop("`dat` must be a matrix/data.frame of draws.")
-  M <- as.matrix(dat)
-  # Align shape so that columns correspond to time points
-  if (ncol(M) == length(y)) {
-    # ok
-  } else if (nrow(M) == length(y)) {
-    M <- t(M)
-  } else {
-    stop(sprintf("`dat` dims (%d x %d) not compatible with length(y) = %d",
-                 nrow(M), ncol(M), length(y)))
-  }
-  alpha  <- (1 - level)/2
-  lower  <- apply(M, 2, stats::quantile, probs = alpha,    na.rm = TRUE)
-  upper  <- apply(M, 2, stats::quantile, probs = 1 - alpha, na.rm = TRUE)
-  mean(y >= lower & y <= upper)
+suppressMessages(
+  suppressWarnings(
+    # get the metrics
+    for (i in seq_along(all_states)){
+      state_i <- all_states[i]
+      cat(sprintf(">>> [MCMC %d/%d] State = %s ...\n", i, length(all_states), state_i))
+      baseline_i   <- readRDS(file.path(fit_dir, sprintf("%s_baseline.rds", state_i)))
+      results_i <- readRDS(file.path(fit_dir, sprintf("%s_ARABM_fit.rds", state_i)))
+      results_wGT_i <- readRDS(file.path(fit_dir, sprintf("%s_ARABMwGT_fit.rds", state_i)))
+      
+      true_data <- baseline_i %>% select(ew_start, sum_of_cases_final) %>% unique()
+      
+      tmp_crps <- tmp_wGT_crps <- numeric(length(results_i))
+      tmp_mcr50 <- tmp_wGT_mcr50 <- numeric(length(results_i))
+      tmp_mcr95 <- tmp_wGT_mcr95 <- numeric(length(results_i))
+      # For each different time T
+      for (j in 1:length(results_i)) {
+        
+          fit <- as_cmdstan_fit(results_i[[j]]$fit_object$output_files())
+          fit_wGT <- as_cmdstan_fit(results_wGT_i[[j]]$fit_object$output_files())
+          
+          # since the number of N is less in the baseline method
+          num_N <- ncol(fit$draws(variables = "N", format = "draws_matrix"))
+          num_N_wGT <- ncol(fit_wGT$draws(variables = "N", format = "draws_matrix"))
+          
+          # draws
+          pred <- get_N_lastL_draws(results_i[[j]]$fit_object$output_files(), num_N, min(num_N, L))
+          pred_wGT <- get_N_lastL_draws(results_wGT_i[[j]]$fit_object$output_files(), num_N_wGT, min(num_N, L)) # num_N is always smaller
+          
+          # get the case of actual sequence
+          y_true <- true_data %>% filter(ew_start <= results_i[[j]]$window_end &
+                                         ew_start >= results_i[[j]]$window_start) %>%
+            select(sum_of_cases_final)
+          y_true <- tail(y_true, min(num_N, L))
+          
+          # crps
+          tmp_crps[j] <- mean(crps_sample(y = y_true$sum_of_cases_final, dat = pred))
+          tmp_wGT_crps[j]  <- mean(crps_sample(y = y_true$sum_of_cases_final, dat = pred_wGT))
+          
+          # 50%
+          tmp_mcr50[j] <- coverage_rate_sample(y_true$sum_of_cases_final, pred, level = 0.50)
+          tmp_wGT_mcr50[j]  <- coverage_rate_sample(y_true$sum_of_cases_final, pred_wGT,  level = 0.50)
+          # 95%
+          tmp_mcr95[j] <- coverage_rate_sample(y_true$sum_of_cases_final, pred, level = 0.95)
+          tmp_wGT_mcr95[j]  <- coverage_rate_sample(y_true$sum_of_cases_final, pred_wGT,  level = 0.95)
+      }
+        interval_metrics_list[[i]] <- list(
+          crps_out = mean(tmp_crps),
+          crps_wGT_out = mean(tmp_wGT_crps),
+        
+          mcr50_out = mean(tmp_mcr50),
+          mcr50_wGT_out = mean(tmp_wGT_mcr50),
+        
+          mcr95_out = mean(tmp_mcr95),
+          mcr95_wGT_out = mean(tmp_wGT_mcr95)
+        )
 }
+  )
+)
+
+
 ```
 
 ```{r}
@@ -361,12 +381,11 @@ include_GT <- T
 for (i in seq_along(all_states)) {
   state_i <- all_states[i]
   cat(sprintf(">>> [EVAL %d/%d] State = %s ...\n", i, length(all_states), state_i))
-  
+  # read data
   baseline_i   <- readRDS(file.path(fit_dir, sprintf("%s_baseline.rds", state_i)))
   results_i    <- readRDS(file.path(fit_dir, sprintf("%s_ARABM_fit.rds", state_i)))
   results_wGT_i<- readRDS(file.path(fit_dir, sprintf("%s_ARABMwGT_fit.rds", state_i)))
-  
-  # 提取摘要（与你当前代码保持一致）
+  # results
   arabm_i     <- extract_N_summary(results_i,    num_N = 6) # 默认名：ARABM, ARABM_lwr, ARABM_upr
   arabm_wGT_i <- extract_N_summary(results_wGT_i,num_N = 6, model_name = "ARABMwGT")
   
@@ -375,39 +394,17 @@ for (i in seq_along(all_states)) {
               by = c("ew_now", "ew")) %>%
     left_join(arabm_wGT_i %>% select(ew_now, ew, ARABMwGT, ARABMwGT_lwr, ARABMwGT_upr),
               by = c("ew_now", "ew"))
-  
-  # 每个 ew_now 取“当前可见的最新一周”（与你原逻辑一致）
+  # get the latest week
   n_last <- 1
   result_out_cut <- result_out_i %>%
     filter(!is.na(ARABM)) %>%
     group_by(ew_now) %>%
     slice_max(order_by = ew, n = n_last) %>%
     ungroup()
-  
+  # true number of cases
   truth <- result_out_cut$sum_of_cases_final
   
-  #— 覆盖率（95% 用已有 lwr/upr；50% 用正态近似）
-  cr95_ARABM   <- coverage_rate(truth, result_out_cut$ARABM_lwr,   result_out_cut$ARABM_upr)
-  cr95_wGT     <- coverage_rate(truth, result_out_cut$ARABMwGT_lwr,result_out_cut$ARABMwGT_upr)
-  # 50% 区间近似
-  ci50_A <- make_50_ci_from_95(result_out_cut$ARABM,
-                               result_out_cut$ARABM_lwr, result_out_cut$ARABM_upr)
-  ci50_W <- make_50_ci_from_95(result_out_cut$ARABMwGT,
-                               result_out_cut$ARABMwGT_lwr, result_out_cut$ARABMwGT_upr)
-  cr50_ARABM <- coverage_rate(truth, ci50_A$lwr50, ci50_A$upr50)
-  cr50_wGT   <- coverage_rate(truth, ci50_W$lwr50, ci50_W$upr50)
-  
-  #— CRPS（用正态近似）
-  crps_ARABM <- crps_normal_vec(truth,
-                                mu    = result_out_cut$ARABM,
-                                lwr95 = result_out_cut$ARABM_lwr,
-                                upr95 = result_out_cut$ARABM_upr)
-  crps_wGT   <- crps_normal_vec(truth,
-                                mu    = result_out_cut$ARABMwGT,
-                                lwr95 = result_out_cut$ARABMwGT_lwr,
-                                upr95 = result_out_cut$ARABMwGT_upr)
-  
-  #— 误差指标
+   #— calc metrics
   metric_tbl <- tibble(
     state  = state_i,
     model  = c("Bastos", "ARABM", "ARABMwGT"),
@@ -431,12 +428,12 @@ for (i in seq_along(all_states)) {
       safe_mape(result_out_cut$ARABM,        truth),
       safe_mape(result_out_cut$ARABMwGT,     truth)
     ),
-    CRPS   = c(NA_real_, crps_ARABM, crps_wGT),  # Bastos 如无区间/σ，这里设 NA（或你也可加近似）
-    CR95   = c(NA_real_, cr95_ARABM, cr95_wGT),
-    CR50   = c(NA_real_, cr50_ARABM, cr50_wGT)
+    crps   = c(NA_real_, interval_metrics_list[[i]]$crps_out, interval_metrics_list[[i]]$crps_wGT_out), 
+    mcr95   = c(NA_real_, interval_metrics_list[[i]]$mcr95_out, interval_metrics_list[[i]]$mcr95_wGT_out),
+    mcr50   = c(NA_real_, interval_metrics_list[[i]]$mcr50_out, interval_metrics_list[[i]]$mcr50_wGT_out)
   )
   
-  # 可选：加入 GT（若你要）
+  # optional for GT
   if (include_GT && "GT" %in% names(result_out_cut)) {
     metric_tbl <- bind_rows(
       tibble(
@@ -446,9 +443,9 @@ for (i in seq_along(all_states)) {
         RMSPE = safe_rmspe(result_out_cut$GT, truth),
         MAE   = mae_fun(result_out_cut$GT, truth),
         MAPE  = safe_mape(result_out_cut$GT, truth),
-        CRPS  = NA_real_,  # 若你能给出 GT 的区间，同样可用正态近似
-        CR95  = NA_real_,
-        CR50  = NA_real_
+        crps  = NA_real_,  
+        mcr95  = NA_real_,
+        mcr50  = NA_real_
       ),
       metric_tbl
     )
@@ -457,10 +454,10 @@ for (i in seq_along(all_states)) {
   all_metrics[[state_i]] <- metric_tbl
 }
 
-# 合并所有州指标
+# combine all states
 final_metrics <- bind_rows(all_metrics)
 
-# 保存一份总表（可选）
+# general table
 out_dir <- file.path(path_proj, "outputs")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 readr::write_csv(final_metrics, file.path(out_dir, "multi_state_metrics_with_crps_coverage.csv"))
