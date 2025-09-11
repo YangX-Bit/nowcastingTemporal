@@ -33,6 +33,8 @@ path_source_denguetracker_GT <- file.path(path_source_denguetracker_data, "gtren
 
 path_to_draws_BR <- file.path(file.path(dirname(dirname(path_proj)),"projects","draws","BR"))
 
+
+
 ```
 
 
@@ -464,6 +466,14 @@ readr::write_csv(final_metrics, file.path(out_dir, "multi_state_metrics_with_crp
 
 cat(">>> Done. Combined metrics saved to: ",
     file.path(out_dir, "multi_state_metrics_with_crps_coverage.csv"), "\n")
+
+```
+
+```{r}
+library(writexl)
+
+# write
+write_xlsx(final_metrics, file.path(path_proj, "plots_to_show","BR","final_metrics.xlsx"))
 
 ```
 
