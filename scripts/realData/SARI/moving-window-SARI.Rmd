@@ -27,15 +27,23 @@ library(cmdstanr)
 path_proj = here::here()
 path_source = file.path(path_proj, "source")
 
-# source
-source(file.path(path_source, "simulation", "simulations_functions_final.R"))
+source(file.path(path_source, "functions", "dengue_tracker_functions.R"))
+source(file.path(path_source, "functions", "tidy_dengueBR.R"))
+source(file.path(path_source, "functions", "fit_function.R"))
+source(file.path(path_source, "functions", "metrics.R"))
+aweek::set_week_start("Sunday")
 
-# source from other paper
-source(file.path(path_source, "funcs_german_paper", "plotReportingTriangle.R"))
-source(file.path(path_source, "functions", "prior_function.R"))
+path_source_nowcasting <- file.path(dirname(path_proj), "nowcasting", "source")
+source(file.path(path_source_nowcasting, "simulation", "simulations_functions_final.R"))
+source(file.path(path_source_nowcasting, "functions", "prior_function.R"))
+source(file.path(path_source_nowcasting, "functions", "fit_function.R"))
+source(file.path(path_source_nowcasting, "functions", "plot_function.R"))
+source(file.path(path_source_nowcasting, "funcs_german_paper", "plotReportingTriangle.R"))
+
+source(file.path(path_source_nowcasting, "functions", "table_function.R"))
 
 # data import
-SARI <- as.data.frame(read.csv(file.path(path_proj, "data", "raw", "clean_data_srag_epiweek_delay_table_PR.csv"),))
+SARI <- as.data.frame(read.csv(file.path(dirname(path_source_nowcasting), "data", "raw", "clean_data_srag_epiweek_delay_table_PR.csv"),))
 
 # set week
 set_week_start("Sunday")
@@ -44,7 +52,8 @@ SARI$date <- get_date(week = SARI$epiweek, year = SARI$epiyear)
 
 # mac
 # posterior_draws_path = file.path(Sys.getenv("HOME"), "Desktop", "draws", "SARI")
-posterior_draws_path = file.path(path_proj, "data", "draws", "SARI")
+path_to_draws_BR <- file.path(file.path(dirname(dirname(path_proj)),"projects","draws","SARI"))
+
 
 #Windows
 #posterior_draws_path = file.path(Sys.getenv("USERPROFILE"), "Desktop", "draws", "realData", "SARI")
@@ -53,26 +62,40 @@ posterior_draws_path = file.path(path_proj, "data", "draws", "SARI")
 
 ```{r}
 #models
-q_constant <- file.path(path_proj, "source", "models", "q-constant.stan")
-b_constant <- file.path(path_proj, "source", "models", "b-constant.stan")
-b_rw <- file.path(path_proj, "source", "models", "b-rw1.stan")
-b_ou <-  file.path(path_proj, "source", "models", "b-ou.stan")
+baseline <-  file.path(path_source_nowcasting,  "models", "b-ou.stan")
+proposed <- file.path(path_source,  "models", "b-ou-GT-combined-no-covar.stan")
+
 
 compiled_models <- list(
-  q_constant = cmdstan_model(q_constant),
-  b_constant = cmdstan_model(b_constant),
-  b_rw = cmdstan_model(b_rw),
-  b_ou = cmdstan_model(b_ou)
+  baseline = cmdstan_model(baseline),
+  proposed = cmdstan_model(proposed)
 )
 
-models_to_use <- c("q_constant", "b_constant", "b_rw", "b_ou")
+models_to_use <- c("baseline", "proposed")
 ```
 
-```{r, warning=FALSE}
-source(file.path(path_source, "functions", "plot_function.R"))
-source(file.path(path_source, "functions", "fit_function.R"))
-source(file.path(path_source, "functions", "table_function.R"))
+```{r}
+# long table
+data_long <- SARI %>%
+  select(regionalsaude, date, Notifications) %>%
+  pivot_longer(cols = Notifications, names_to = "delay", values_to = "value")
 
+# case ts plots
+ts <- ggplot(data_long, aes(x = date, y = value)) +
+  geom_line(color = "steelblue") +
+  
+  facet_wrap(~ regionalsaude, scales = "free_y") +
+  labs(title = "SARI cases by region",
+       x = "Date", y = "cases notifications") +
+  theme_minimal()+
+  theme(    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(ts)
+```
+
+
+```{r, warning=FALSE}
 # setting: delay,  number of days
 seed <- 123
 
@@ -86,6 +109,8 @@ data_41002 <- SARI %>% filter(regionalsaude == 41002) %>%
   select(-c("epiweek","epiyear","regionalsaude")) %>%
   relocate(Notifications, .after = last_col())
 rownames(data_41002) <- data_41002$date
+
+plot(x = data_41002$date,y = data_41002$Notifications, type = "l")
 
 #transfer to cumu matrix
 data_41002[,c(1:(D+1))] <- cumulative_matrix(as.matrix(data_41002[,c(1:(D+1))]))
@@ -103,70 +128,127 @@ rownames(case_true) <- as.character(data_41002$date)
 ```
 
 ```{r}
-data41002_exp_plot <- data_41002 %>% 
-  filter(date >= min(scoreRange) & date <= max(scoreRange)) %>%
-  select(-Notifications_within_26w, -Notifications, -date) %>%
-  as.matrix()
+generate_fourier_basis <- function(weeks, H_max = 3, period = 52) {
+  if (inherits(weeks, "Date")) {
+    weeks <- seq_along(weeks)
+  }
+  
+  angle <- 2 * pi * (weeks - 1) / period
+  
+  fourier_list <- lapply(1:H_max, function(h) {
+    cbind(
+      cos = cos(h * angle),
+      sin = sin(h * angle)
+    )
+  })
+  
+  basis <- do.call(cbind, fourier_list)
+  
+  # colnames
+  colnames(basis) <- unlist(lapply(1:H_max, function(h) {
+    c(paste0("cos_h", h), paste0("sin_h", h))
+  }))
+  
+  return(basis)
+}
 
-page_num <- ceiling(nrow(data41002_exp_plot)/16)
+weeks_per_yr <- 52
+t <- 1:(weeks_per_yr * 3)
+fourier_basis <- generate_fourier_basis(t, H_max = 10, period = weeks_per_yr)
+H_used <- 3
 
-exp_plot <- fit_exp_plot(data41002_exp_plot,ncol = 4, nrow = 4, page = c(1:page_num), if_fit = T)
-
-exp_plot
-```
-
-
-
-
-```{r}
-exp_data <- data.frame( date = as.Date(rownames(data41002_exp_plot)),
-                        b = exp_plot$coefficients$b,
-                        phi = exp_plot$coefficients$phi
-                        )
-
-exp_b_plot <- ggplot(exp_data, aes(x = date, y = b)) +
-  geom_point(color = "black", size = 1.5) +       
-  geom_smooth(method = "loess", se = TRUE,        
-              color = "blue", fill = "grey", alpha = 0.5) +
-  theme_minimal() +
-  labs(x = NULL, y = "Y", title = "Smoothed Curve of parameter b")
-
-exp_phi_plot <- ggplot(exp_data, aes(x = date, y = phi)) +
-  geom_point(color = "black", size = 1.5) +       
-  geom_smooth(method = "loess", se = TRUE,        
-              color = "blue", fill = "grey", alpha = 0.5) +
-  theme_minimal() +
-  labs(x = NULL, y = "Y", title = "Smoothed Curve of parameter phi")
-
-exp_b_plot
-exp_phi_plot
 ```
 
 
 ```{r}
-# scoreRange_SARI <- seq(as.Date("2009-08-15"),as.Date("2009-12-30"),by="30 day")
-scoreRange_SARI <- seq(as.Date("2009-08-02"),as.Date("2009-11-22"), by = "4 week")
+# scoreRange_SARI <- seq(as.Date("2009-08-02"),as.Date("2009-11-22"), by = "4 week")
+# scoreRange_SARI
+# first_date <- as.Date("2009-06-14")
+
+scoreRange_SARI <- seq(as.Date("2016-02-07"),as.Date("2016-09-04"), by = "6 week")
 scoreRange_SARI
-first_date <- as.Date("2009-06-14")
+first_date <- as.Date("2012-01-01")
 
 hypers <- hypers_q(phi_ref = 0.2, D_ref = 26, type = "exponential", alpha_phi = 1.4, sd_log_b = 0.5, delay_seq = 0:26)
 
-# out_SARI <- nowcasting_moving_window(data_41002_input,  scoreRange = scoreRange_SARI, 
-#                                 case_true = case_true,
-#                                 start_date = first_date,
-#                                 D = D, 
-#                                 methods = models_to_use,
-#                                 compiled_models = compiled_models,
-#                                 iter_sampling = 10000, iter_warmup = 5000, refresh = 0,
-#                                 num_chains = 3, suppress_output = T,
-#                                 posterior_draws_path = posterior_draws_path, hypers = hypers)
+out_SARI <- nowcasting_moving_window_with_temporal(data_41002_input,  scoreRange = scoreRange_SARI,
+                                case_true = case_true,
+                                start_date = first_date,
+                                D = D,
+                                methods = models_to_use,
+                                compiled_models = compiled_models,
+                                S = H_used * 2, bases_s = fourier_basis[, 1:(H_used * 2)],
+                                E = 500,
+                                iter_sampling = 3000, iter_warmup = 1000, refresh = 0,
+                                num_chains = 1, suppress_output = T,
+                                posterior_draws_path = path_to_draws_BR, hypers = hypers)
 # save(out_SARI, file = file.path(path_proj, "data", "fitted_model","SARI_090802_to_901122_D=26.RData"))
-load( file.path(path_proj, "data", "fitted_model","SARI_090802_to_901122_D=26.RData"))
+# load( file.path(path_proj, "data", "fitted_model","SARI_090802_to_901122_D=26.RData"))
 #case_true - as.numeric(data_41002_input[,26])
 
 mat_y <- normalize_matrix_columns(data41002_exp_plot)
 last_reported <- as.matrix(data_41002[, c("Notifications_within_26w")])
 rownames(last_reported) <- as.character(data_41002$date)
+```
+```{r}
+library(dplyr)
+
+# 辅助函数
+safe_rmspe <- function(pred, actual, eps = 1e-8) {
+  sqrt(mean(((pred - actual) / pmax(actual, eps))^2, na.rm = TRUE)) * 100
+}
+safe_mape <- function(pred, actual, eps = 1e-8) {
+  mean(abs((pred - actual) / pmax(actual, eps)), na.rm = TRUE) * 100
+}
+coverage_rate <- function(truth, lwr, upr) {
+  mean(truth >= lwr & truth <= upr, na.rm = TRUE)
+}
+
+# 对一个结果表计算指标
+calc_metrics <- function(df) {
+  truth <- df$case_true
+  
+  tibble(
+    model = c("baseline", "proposed"),
+    RMSE  = c(
+      sqrt(mean((df$mean_baseline - truth)^2, na.rm = TRUE)),
+      sqrt(mean((df$mean_proposed - truth)^2, na.rm = TRUE))
+    ),
+    RMSPE = c(
+      safe_rmspe(df$mean_baseline, truth),
+      safe_rmspe(df$mean_proposed, truth)
+    ),
+    MAE   = c(
+      mean(abs(df$mean_baseline - truth), na.rm = TRUE),
+      mean(abs(df$mean_proposed - truth), na.rm = TRUE)
+    ),
+    MAPE  = c(
+      safe_mape(df$mean_baseline, truth),
+      safe_mape(df$mean_proposed, truth)
+    ),
+    CR95  = c(
+      coverage_rate(truth, df$lower_baseline, df$upper_baseline),
+      coverage_rate(truth, df$lower_proposed, df$upper_proposed)
+    )
+  )
+}
+
+results_SARI <- nowcasts_table(out_SARI, D = D, report_unit = "week", 
+                          methods = models_to_use)
+names(results_SARI) <- sapply(scoreRange_SARI, function(x) TeX(as.character(x), bold = TRUE))
+
+# 应用到整个 list
+final_metrics <- lapply(results_SARI, calc_metrics)
+
+# 如果想合并成一张大表，可以加上日期（list 的名字）
+final_metrics <- bind_rows(
+  lapply(names(results_SARI), function(nm) {
+    calc_metrics(results_SARI[[nm]]) %>% mutate(date_now = nm)
+  })
+)
+
+print(final_metrics)
+
 ```
 
 

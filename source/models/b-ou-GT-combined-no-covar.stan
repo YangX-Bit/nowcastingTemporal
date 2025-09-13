@@ -14,13 +14,16 @@ data {
   // real mean_logit_alpha;
   // real<lower=0> sd_logit_alpha;
 
-  // (3) Covariates (time-varying effects)
-  int<lower=1>       K;                   // number of covariates
-  matrix[T, K]       x;                   // covariate matrix
+  // (3) Predictor
+  // int<lower=1>       K;                   // number of covariates
+  // matrix[T, K]       x;                   // covariate matrix
 
   // (4) Pre-scaled Fourier basis for seasonality
   int<lower=1>       S;                   // S = 2 * H_max
   matrix[T, S]       bases_s;                 // each column sd ≈ 1
+  
+  // (5) Population at risk
+  int<lower=0> E;
 }
 
 transformed data {
@@ -28,7 +31,7 @@ transformed data {
 }
 
 parameters {
-  // (A) Delay-model (OU) parameters
+  // (1) Delay-model (OU) parameters
   vector[T]          log_b;
   vector[T]          logit_phi;
   // vector[T]          logit_alpha;  
@@ -41,57 +44,53 @@ parameters {
   real<lower=0>      sigma_logit_phi;
   // real<lower=0>      sigma_logit_alpha;
 
-  // (B) Covariate effect
+  // (2) Predictor
   real                beta0;
-  matrix[K, T]        beta_x;             // time-varying coefficients for x
-  real<lower=0>       sigma_beta_x;       // prior sd for beta_x
+  // vector[K]           beta_x;             // coefficients for x
 
-  // (C) Seasonality coefficients
+  // (3) Seasonality coefficients
   vector[S]           beta_s;
-  real<lower=0>       sigma_s;
+  
+  // (4) Dependent noise
+  vector[T]           w;
+  real<lower=0>       sigma_w;
+  real<lower=0,upper=1> rho_w;
 
-  // (D) White noise
-  vector[T]           eta;
-  real<lower=0>       sigma_eta;
+  // (5) White noise
+  vector[T]           epsilon;
+  real<lower=0>       sigma_epsilon;
 }
 
 transformed parameters {
   // (1) Delay-model
   vector<lower=0>[T]            b      = exp(log_b);
   vector<lower=0,upper=1>[T]    phi    = inv_logit(logit_phi);
-  // vector<lower=0,upper=1>[T]   alpha   = inv_logit(logit_alpha);
   matrix[T, D+1]       q;
   matrix[T, D+1]       log_q;
-  for (t in 1:T) {
-    for (d in 0:D) {
-      if (t + d <= T) {
-        // q[t, d+1]     = alpha[t] - (alpha[t] - phi[t]) * exp(-b[t] * d);
-        q[t, d+1]     = 1 - (1 - phi[t]) * exp(-b[t] * d);
-        log_q[t, d+1] = log(q[t, d+1]);
-      } else {
-        q[t, d+1]     = 0;
-        log_q[t, d+1] = negative_infinity();
-      }
+  for (d in 0:D) {
+    for (t in 1:(T-d)) {
+      q[t, d+1]     = 1 - (1 - phi[t]) * exp(-b[t] * d);
+      log_q[t, d+1] = log(q[t, d+1] + 1e-12); // add tiny to avoid log(0)
     }
   }
 
   // (2) Seasonal component
   vector[T]            season = bases_s * beta_s;
 
-  // (3) Intensity & likelihood pivot
-  vector[T]            log_lambda;
-  vector[T]            lambda;
-  for (t in 1:T) {
-    log_lambda[t] = beta0
-                  + dot_product(beta_x[, t], x[t])
-                  + season[t]
-                  + eta[t];
-    lambda[t]     = exp(log_lambda[t]);
-  }
+  real intercept = beta0 + log(E);
+  vector[T] linear_pred = rep_vector(intercept, T) 
+                   //+ x * beta_x 
+                   + season
+                   + w
+                   + epsilon;
+
+  vector[T] log_lambda = linear_pred;
+  vector[T] lambda     = exp(log_lambda);
 }
 
+
 model {
-  // --- (A) Delay-model priors (original) ---
+  // --- (1) Delay-model priors (original) ---
   mu_log_b        ~ normal(mean_log_b, sd_log_b);
   mu_logit_phi    ~ normal(mean_logit_phi, sd_logit_phi);
   theta_log_b     ~ lognormal(0, 1);
@@ -117,28 +116,30 @@ model {
     // logit_alpha[t] ~ normal(logit_alpha[t-1], sigma_logit_alpha);
   }
 
-  // --- (B) Covariate effect priors (adjusted) ---
-  beta0         ~ normal(0, 1);
+  // --- (2) Predictor coefficient ---
+  beta0         ~ normal(0, 0.1);
   
-  sigma_beta_x  ~ normal(0, 0.2);
-  for (k in 1:K)
-    for (t in 1:T)
-      beta_x[k, t] ~ normal(0, sigma_beta_x);
+  //beta_x        ~ normal(0, 0.5);
       
-  // --- (C) Seasonality priors (match original α/γ prior) ---
+  // --- (3) Seasonality priors (match original α/γ prior) ---
   for (i in 1:S)
-    beta_s[i]    ~ normal(0, 0.2);
-  sigma_s      ~ normal(0, 1);
+    beta_s[i]    ~ normal(0, 0.5);
 
-  // --- (D) Noise prior (original) ---
-  sigma_eta     ~ normal(0, 0.2);
-  eta           ~ normal(0, sigma_eta);
+  // --- (4) Dependent noise prior ---
+  sigma_w ~ lognormal(-1.5, 1);
+  rho_w ~ lognormal(-0.3, 0.5);
+  w[1] ~ normal(0, sigma_w);
+  for (j in 2:T)
+    w[j] ~ normal(rho_w * w[j-1],sigma_w);
+  
+  // --- (5) Independent noise prior ---
+  sigma_epsilon     ~ lognormal(-1.5, 1);
+  epsilon           ~ normal(0, sigma_epsilon);
 
 
   // --- Likelihood over delays ---
-  for (t in 1:T)
-    for (d in 0:D)
-      if (t + d <= T)
+  for (d in 0:D)
+    for (t in 1:(T-d))
         target += poisson_log_lpmf(Y[t, d+1] | log_lambda[t] + log_q[t, d+1]);
 }
 
