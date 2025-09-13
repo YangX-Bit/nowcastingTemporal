@@ -86,7 +86,7 @@ ggplot(case_df, aes(x = date, y = cases, color = uf)) +
 ```
 
 ```{r}
-ggplot(case_df, aes(x = date, y = cases)) +
+actual_cases <- ggplot(case_df, aes(x = date, y = cases)) +
   geom_line(color = "steelblue", size = 0.8) +
   geom_vline(xintercept = as.Date("2024-07-28"), 
              linetype = "dashed", color = "black", size = 0.8) +
@@ -94,7 +94,19 @@ ggplot(case_df, aes(x = date, y = cases)) +
   labs(title = "Dengue Case Trends per State",
        x = "Date", y = "Number of Cases") +
   theme_minimal(base_size = 12) +
-  theme(strip.text = element_text(face = "bold"))
+  theme(
+    strip.text = element_text(face = "bold"),
+    panel.background   = element_rect(fill = "white", colour = NA),
+    plot.background    = element_rect(fill = "white", colour = NA),
+    panel.grid.major   = element_line(colour = "grey90"),
+    panel.grid.minor   = element_line(colour = "grey95")
+  )
+
+
+print(actual_cases)
+ggsave(filename = file.path(path_proj, "plots_to_show", "BR", "actual_cases.png"),
+       plot = actual_cases,
+       width = 10, height = 8, dpi = 300)
 
 exposure <- case_df %>% group_by(uf) %>% mutate(exposure = max(cases)/3)%>%
   select(uf,exposure) %>% unique()
@@ -204,16 +216,20 @@ t <- 1:(weeks_per_yr * 3)
 fourier_basis <- generate_fourier_basis(t, H_max = 10, period = weeks_per_yr)
 H_used <- 3
 
-all_states <- c(
-  "AC", "AL", "AP", "AM",
-  "BA", "CE", "DF", #"ES",
-  "GO", "MA", "MT", "MS",
-  "MG", "PA", "PB", "PR",
-  "PE", "PI", "RJ", "RN",
-  "RS", "RO", "RR", "SC",
-  "SP", "SE", "TO"
-)       
-E_vec <- exposure$exposure   
+# all_states <- c(
+#   "AC", "AL", "AP", "AM",
+#   "BA", "CE", "DF", #"ES",
+#   "GO", "MA", "MT", "MS",
+#   "MG", "PA", "PB", "PR",
+#   "PE", "PI", "RJ", "RN",
+#   "RS", "RO", "RR", "SC",
+#   "SP", "SE", "TO"
+# )       
+# E_vec <- exposure$exposure   
+
+all_states <- c("RJ")
+E_vec <-  exposure$exposure[18]
+
 include_GT <- T                      # if include GT
 
 delay_D <- 15
@@ -221,12 +237,13 @@ iter_sampling <- 2500
 iter_warmup <- 1000
 window_length <- 10
 thin <- 1
-step_size <- 5
 chain_num <- 4
 refresh <- 3000
 
 ew_start <- "202410"
 ew_end <- "202430"
+# step_size <- 5 # previous
+step_size <- 3
 ```
 
 
@@ -388,8 +405,8 @@ for (i in seq_along(all_states)) {
   results_i    <- readRDS(file.path(fit_dir, sprintf("%s_ARABM_fit.rds", state_i)))
   results_wGT_i<- readRDS(file.path(fit_dir, sprintf("%s_ARABMwGT_fit.rds", state_i)))
   # results
-  arabm_i     <- extract_N_summary(results_i,    num_N = 6) # 默认名：ARABM, ARABM_lwr, ARABM_upr
-  arabm_wGT_i <- extract_N_summary(results_wGT_i,num_N = 6, model_name = "ARABMwGT")
+  arabm_i     <- extract_N_summary(results_i,    num_N = 4) # 默认名：ARABM, ARABM_lwr, ARABM_upr
+  arabm_wGT_i <- extract_N_summary(results_wGT_i,num_N = 4, model_name = "ARABMwGT")
   
   result_out_i <- baseline_i %>%
     left_join(arabm_i %>% select(ew_now, ew, ARABM, ARABM_lwr, ARABM_upr),

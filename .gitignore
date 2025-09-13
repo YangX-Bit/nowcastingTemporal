@@ -5,3 +5,12 @@
 
 draws/
 outputs/fits/RJ_ARABMwGT_fit.rds
+outputs/fits/MT_ARABMwGT_fit.rds
+outputs/fits/AM_ARABM_fit.rds
+outputs/fits/AM_ARABMwGT_fit.rds
+outputs/fits/AM_baseline.rds
+outputs/fits/MT_ARABM_fit.rds
+outputs/fits/MT_baseline.rds
+outputs/fits/RJ_ARABM_fit.rds
+outputs/fits/RJ_baseline.rds
+outputs/multi_state_metrics_with_crps_coverage.csv
