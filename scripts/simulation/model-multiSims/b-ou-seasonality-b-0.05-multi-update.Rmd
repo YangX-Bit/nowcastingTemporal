@@ -203,10 +203,14 @@ for (j in 1:num_sims) {
   )
 }
 
+full_rep_num_NFRS <- 0
 par(mfrow = c(2, 3))
 for (i in 1:num_sims) {
   matplot(t(data_NFRS[[i]]$q), type = "l", lty = 1, ylim = c(0, 1))
+  full_rep_num_NFRS <- full_rep_num_NFRS + sum(data_NFRS[[i]]$q[,16] > 0.95)
 }
+full_rep_ratio_NFRS <- round(full_rep_num_NFRS/(length(data_NFRS[[i]]$q[,16] ) * num_sims),4) * 100
+full_rep_ratio_NFRS
 
 
 ```
