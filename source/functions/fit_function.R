@@ -147,6 +147,7 @@ run_moving_window <- function(root_dir_infodengue, root_dir_GT,
                               mode = c("fixed", "expanding"),
                               iter_sampling = 10000, iter_warmup = 5000,
                               chains = 3, thin = 1, refresh = 500,
+                              if_show_messages = FALSE,
                               posterior_draws_path
 ) {
   mode <- match.arg(mode)
@@ -284,6 +285,7 @@ run_moving_window <- function(root_dir_infodengue, root_dir_GT,
       parallel_chains = chains,
       thin = thin,
       refresh = refresh,
+      show_messages = if_show_messages,
       output_dir = posterior_draws_path
     )
     

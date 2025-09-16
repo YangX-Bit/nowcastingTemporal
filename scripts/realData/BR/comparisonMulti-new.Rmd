@@ -157,7 +157,7 @@ ggsave(filename = file.path(path_proj, "plots_to_show", "BR", "actual_cases.png"
 
 exposure <- case_df %>% group_by(uf) %>% mutate(exposure = max(cases)/3)%>%
   select(uf,exposure) %>% unique()
-exposure <- exposure[-8,]
+exposure <- exposure
 
 ```
 
@@ -263,19 +263,19 @@ t <- 1:(weeks_per_yr * 3)
 fourier_basis <- generate_fourier_basis(t, H_max = 10, period = weeks_per_yr)
 H_used <- 3
 
-# all_states <- c(
-#   "AC", "AL", "AP", "AM",
-#   "BA", "CE", "DF", #"ES",
-#   "GO", "MA", "MT", "MS",
-#   "MG", "PA", "PB", "PR",
-#   "PE", "PI", "RJ", "RN",
-#   "RS", "RO", "RR", "SC",
-#   "SP", "SE", "TO"
-# )       
-# E_vec <- exposure$exposure   
+all_states <- c(
+  "AC", "AL", "AP", "AM",
+  "BA", "CE", "DF", #"ES",
+  "GO", "MA", "MT", "MS",
+  "MG", "PA", "PB", "PR",
+  "PE", "PI", "RJ", "RN",
+  "RS", "RO", "RR", "SC",
+  "SP", "SE", "TO"
+)
+E_vec <- exposure$exposure
 
-all_states <- c("RJ")
-E_vec <-  exposure$exposure[18]
+# all_states <- c("RJ")
+# E_vec <-  exposure$exposure[18]
 
 include_GT <- T                      # if include GT
 
@@ -309,7 +309,7 @@ suppressMessages(
         E_val   <- E_vec[i]
         
         end_i <- if (state_i %in% names(state_end_map)) state_end_map[[state_i]] else ew_end
-        cat(sprintf(">>> [MCMC %d/%d] State=%s | cutoff EW=%d ...\n", 
+        cat(sprintf(">>> [MCMC %d/%d] State=%s | cutoff EW=%s ...\n", 
                     i, length(all_states), state_i, end_i))
 
         # baseline (with actual value)
