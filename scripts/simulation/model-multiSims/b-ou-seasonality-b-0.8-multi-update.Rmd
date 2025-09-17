@@ -640,15 +640,15 @@ print(final_FR)
 path_to_save_FR <- file.path(path_proj, "data", "simulation","results","FR")
 
 # sim data
-saveRDS(data_FR, file = file.path(path_to_save_FR, "data_FR.rds"))
+# saveRDS(data_FR, file = file.path(path_to_save_FR, "data_FR.rds"))
 # path
-saveRDS(files_prps_FR, file = file.path(path_to_save_FR, "files_prps_FR.rds"))
-saveRDS(files_bsl_FR,  file = file.path(path_to_save_FR, "files_bsl_FR.rds"))
+# saveRDS(files_prps_FR, file = file.path(path_to_save_FR, "files_prps_FR.rds"))
+# saveRDS(files_bsl_FR,  file = file.path(path_to_save_FR, "files_bsl_FR.rds"))
 # metrics
-saveRDS(final_long_FR, file = file.path(path_to_save_FR, "final_long_FR.rds"))
-saveRDS(final_FR, file = file.path(path_to_save_FR, "final_FR.rds"))
+# saveRDS(final_long_FR, file = file.path(path_to_save_FR, "final_long_FR.rds"))
+# saveRDS(final_FR, file = file.path(path_to_save_FR, "final_FR.rds"))
 # prediction results
-saveRDS(preds_result_FR, file = file.path(path_to_save_FR, "final_FR_predictions.rds"))
+# saveRDS(preds_result_FR, file = file.path(path_to_save_FR, "final_FR_predictions.rds"))
 ```
 
 

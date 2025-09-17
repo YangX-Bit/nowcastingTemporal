@@ -541,15 +541,15 @@ print(final_NFRM)
 path_to_save_NFRM <- file.path(path_proj, "data", "simulation","results","NFRM")
 
 # sim data
-saveRDS(data_NFRM, file = file.path(path_to_save_NFRM, "data_NFRM.rds"))
+# saveRDS(data_NFRM, file = file.path(path_to_save_NFRM, "data_NFRM.rds"))
 # path
-saveRDS(files_prps_NFRM, file = file.path(path_to_save_NFRM, "files_prps_NFRM.rds"))
-saveRDS(files_bsl_NFRM,  file = file.path(path_to_save_NFRM, "files_bsl_NFRM.rds"))
+# saveRDS(files_prps_NFRM, file = file.path(path_to_save_NFRM, "files_prps_NFRM.rds"))
+# saveRDS(files_bsl_NFRM,  file = file.path(path_to_save_NFRM, "files_bsl_NFRM.rds"))
 # metrics
-saveRDS(final_long_NFRM, file = file.path(path_to_save_NFRM, "final_long_NFRM.rds"))
-saveRDS(final_NFRM, file = file.path(path_to_save_NFRM, "final_NFRM.rds"))
+# saveRDS(final_long_NFRM, file = file.path(path_to_save_NFRM, "final_long_NFRM.rds"))
+# saveRDS(final_NFRM, file = file.path(path_to_save_NFRM, "final_NFRM.rds"))
 # prediction results
-saveRDS(preds_result_NFRM, file = file.path(path_to_save_NFRM, "final_NFRM_predictions.rds"))
+# saveRDS(preds_result_NFRM, file = file.path(path_to_save_NFRM, "final_NFRM_predictions.rds"))
 ```
 
 
@@ -559,7 +559,7 @@ files_bsl_NFRM  <- readRDS(file.path(path_to_save_NFRM, "files_bsl_NFRM.rds"))
 
 # result table
 final_long_NFRM     <- readRDS(file.path(path_to_save_NFRM, "final_long_NFRM.rds"))
-final_crps_tbl_NFRM <- readRDS(file.path(path_to_save_NFRM, "final_NFRM.rds"))
+final_NFRM <- readRDS(file.path(path_to_save_NFRM, "final_NFRM.rds"))
 
 preds_result_NFRM <- readRDS(file.path(path_to_save_NFRM, "final_NFRM_predictions.rds"))
 ```

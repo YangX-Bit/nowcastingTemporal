@@ -544,15 +544,15 @@ print(final_NFRS)
 path_to_save_NFRS <- file.path(path_proj, "data", "simulation","results","NFRS")
 
 # sim data
-saveRDS(data_NFRS, file = file.path(path_to_save_NFRS, "data_NFRS.rds"))
+# saveRDS(data_NFRS, file = file.path(path_to_save_NFRS, "data_NFRS.rds"))
 # path
-saveRDS(files_prps_NFRS, file = file.path(path_to_save_NFRS, "files_prps_NFRS.rds"))
-saveRDS(files_bsl_NFRS,  file = file.path(path_to_save_NFRS, "files_bsl_NFRS.rds"))
+# saveRDS(files_prps_NFRS, file = file.path(path_to_save_NFRS, "files_prps_NFRS.rds"))
+# saveRDS(files_bsl_NFRS,  file = file.path(path_to_save_NFRS, "files_bsl_NFRS.rds"))
 # metrics
-saveRDS(final_long_NFRS, file = file.path(path_to_save_NFRS, "final_long_NFRS.rds"))
-saveRDS(final_NFRS, file = file.path(path_to_save_NFRS, "final_NFRS.rds"))
+# saveRDS(final_long_NFRS, file = file.path(path_to_save_NFRS, "final_long_NFRS.rds"))
+# saveRDS(final_NFRS, file = file.path(path_to_save_NFRS, "final_NFRS.rds"))
 # prediction results
-saveRDS(preds_result_NFRS, file = file.path(path_to_save_NFRS, "final_NFRS_predictions.rds"))
+# saveRDS(preds_result_NFRS, file = file.path(path_to_save_NFRS, "final_NFRS_predictions.rds"))
 ```
 
 

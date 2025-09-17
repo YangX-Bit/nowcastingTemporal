@@ -555,6 +555,25 @@ write_xlsx(final_metrics_out, file.path(path_proj, "plots_to_show","BR","final_m
 ```
 
 ```{r}
+states_in_paper <- c("AM", "RJ", "RN")
+results_paper <- final_metrics_out %>% filter(state %in% states_in_paper) %>% 
+  select( -MAE, -MAPE)
+results_sm <- final_metrics_out %>% filter(!(state %in% states_in_paper)) %>% 
+  select( -MAE, -MAPE)
+
+
+highlight_metric_pairs_simple(
+      df_wide    = ww$wide_print,
+      metrics    = metrics,
+      directions = c(RMSE="lower", RMSPE="lower", CR95="closer", CR50="closer", CRPS="lower"),
+      targets    = c(CR95=0.95, CR50=0.50),  # or 95/50 if your data are percentages
+      color = "red",
+      tie_highlight = FALSE                   # <- no highlight on ties
+)
+```
+
+
+```{r}
 library(ggplot2)
 
 # 定义数据
