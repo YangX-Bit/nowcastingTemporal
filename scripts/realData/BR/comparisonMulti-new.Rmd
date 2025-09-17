@@ -556,20 +556,52 @@ write_xlsx(final_metrics_out, file.path(path_proj, "plots_to_show","BR","final_m
 
 ```{r}
 states_in_paper <- c("AM", "RJ", "RN")
-results_paper <- final_metrics_out %>% filter(state %in% states_in_paper) %>% 
-  select( -MAE, -MAPE)
-results_sm <- final_metrics_out %>% filter(!(state %in% states_in_paper)) %>% 
-  select( -MAE, -MAPE)
+final_metrics_out <- final_metrics_out  %>% 
+  select( -MAE, -MAPE) %>%  
+  mutate(model = recode(model, "ARABM"  = "Baseline", "ARABMwGT" = "Proposed")) %>%
+    pivot_wider(
+    id_cols = state,
+    names_from = model,
+    values_from = c(RMSE, RMSPE, crps, mcr95, mcr50),
+    names_glue = "{.value}:{model}"
+  ) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 2)))
 
+results_paper <- final_metrics_out %>% filter(state %in% states_in_paper)
+results_sm <- final_metrics_out %>% filter(!(state %in% states_in_paper))
 
-highlight_metric_pairs_simple(
-      df_wide    = ww$wide_print,
+metrics <- c("RMSE", "RMSPE", "crps", "mcr95", "mcr50")
+df_paper <- highlight_metric_pairs_simple(
+      df_wide    = results_paper,
       metrics    = metrics,
-      directions = c(RMSE="lower", RMSPE="lower", CR95="closer", CR50="closer", CRPS="lower"),
+      directions = c(RMSE="lower", RMSPE="lower", mcr95="closer", mcr50="closer", crps="lower"),
       targets    = c(CR95=0.95, CR50=0.50),  # or 95/50 if your data are percentages
       color = "red",
       tie_highlight = FALSE                   # <- no highlight on ties
 )
+
+cat(render_latex_metric_pairs(
+      df_print = df_paper,
+      caption  = paste0("Baseline vs Proposed across metrics (", scenario = scenarios[j], "; last ", 1  ," weeks)")
+))
+
+```
+
+```{r}
+df_sm <- highlight_metric_pairs_simple(
+      df_wide    = results_sm,
+      metrics    = metrics,
+      directions = c(RMSE="lower", RMSPE="lower", mcr95="closer", mcr50="closer", crps="lower"),
+      targets    = c(CR95=0.95, CR50=0.50),  # or 95/50 if your data are percentages
+      color = "red",
+      tie_highlight = FALSE                   # <- no highlight on ties
+)
+
+cat(render_latex_metric_pairs(
+      df_print = df_sm,
+      caption  = paste0("Baseline vs Proposed across metrics (", scenario = scenarios[j], "; last ", 1  ," weeks)")
+))
+
 ```
 
 
