@@ -33,8 +33,7 @@ path_source_denguetracker_GT <- file.path(path_source_denguetracker_data, "gtren
 
 path_to_draws_BR <- file.path(file.path(dirname(dirname(path_proj)),"projects","draws","BR"))
 
-
-
+set_cmdstan_path(file.path(dirname(dirname(path_proj)),"cmdstan-2.32.0"))
 ```
 
 
@@ -297,6 +296,7 @@ step_size <- 3
 # MCMC
 
 ```{r, message=FALSE}
+set.seed(1)
 ## 1) Define once (before the loop)
 state_end_map <- c(AL = 202447L, AP = 202447L, RR = 202447L,   # Nov 17, 2024
                    PE = 202440L, SE = 202440L)                 # Sep 29, 2024
@@ -411,8 +411,8 @@ suppressMessages(
           num_N_wGT <- ncol(fit_wGT$draws(variables = "N", format = "draws_matrix"))
           
           # draws
-          pred <- get_N_lastL_draws(results_i[[j]]$fit_object$output_files(), num_N, min(num_N, L))
-          pred_wGT <- get_N_lastL_draws(results_wGT_i[[j]]$fit_object$output_files(), num_N_wGT, min(num_N, L)) # num_N is always smaller
+          pred <- get_N_lastL_draws(results_i[[j]]$fit_object$output_files(), num_N, min(num_N, L), if_impute = T)
+          pred_wGT <- get_N_lastL_draws(results_wGT_i[[j]]$fit_object$output_files(), num_N_wGT, min(num_N, L), if_impute = T) # num_N is always smaller
           
           # get the case of actual sequence
           y_true <- true_data %>% filter(ew_start <= results_i[[j]]$window_end &
@@ -421,8 +421,8 @@ suppressMessages(
           y_true <- tail(y_true, min(num_N, L))
           
           # crps
-          tmp_crps[j] <- mean(crps_sample(y = y_true$sum_of_cases_final, dat = pred))
-          tmp_wGT_crps[j]  <- mean(crps_sample(y = y_true$sum_of_cases_final, dat = pred_wGT))
+          tmp_crps[j] <- mean(scoringRules::crps_sample(y = y_true$sum_of_cases_final, dat = pred))
+          tmp_wGT_crps[j]  <- mean(scoringRules::crps_sample(y = y_true$sum_of_cases_final, dat = pred_wGT))
           
           # 50%
           tmp_mcr50[j] <- coverage_rate_sample(y_true$sum_of_cases_final, pred, level = 0.50)
@@ -540,6 +540,8 @@ readr::write_csv(final_metrics, file.path(out_dir, "multi_state_metrics_with_crp
 
 cat(">>> Done. Combined metrics saved to: ",
     file.path(out_dir, "multi_state_metrics_with_crps_coverage.csv"), "\n")
+
+final_metrics_out <- final_metrics %>% filter(model == "ARABM" | model == "ARABMwGT") 
 
 ```
 

@@ -205,14 +205,25 @@ get_N_lastL_mean <- function(files, wks, L) {
 }
 
 # for CRPS
-get_N_lastL_draws <- function(files, wks, L) {
+get_N_lastL_draws <- function(files, wks, L, if_impute = FALSE) {
   fit2 <- as_cmdstan_fit(files)
   vars <- paste0("N[", (wks - L + 1):wks, "]")
   dm   <- fit2$draws(variables = vars, format = "draws_matrix")  # draws x L
   mat  <- t(dm)  # L x draws
   rm(fit2, dm); gc()
+  
+  if (if_impute) {
+    for (i in 1:nrow(mat)) {
+      if (anyNA(mat[i, ])) {
+        row_mean <- mean(mat[i, ], na.rm = TRUE)
+        mat[i, is.na(mat[i, ])] <- row_mean
+      }
+    }
+  }
+  
   mat
 }
+
 
 coverage_rate_sample <- function(y, dat, level = 0.95) {
   stopifnot(is.numeric(y), length(y) > 0)
