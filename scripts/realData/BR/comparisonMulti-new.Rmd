@@ -551,6 +551,7 @@ library(writexl)
 # write
 write_xlsx(final_metrics, file.path(path_proj, "plots_to_show","BR","final_metrics_with_diff_ends.xlsx"))
 
+write_xlsx(final_metrics_out, file.path(path_proj, "plots_to_show","BR","final_metrics_with_diff_ends_2m.xlsx"))
 ```
 
 ```{r}
