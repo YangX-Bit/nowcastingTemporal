@@ -377,7 +377,6 @@ suppressMessages(
     )
   )
 
-
 ```
 
 
@@ -555,7 +554,8 @@ write_xlsx(final_metrics_out, file.path(path_proj, "plots_to_show","BR","final_m
 ```
 
 ```{r}
-states_in_paper <- c("AM", "RJ", "RN")
+# states_in_paper <- c("AM", "RJ", "RN")
+states_in_paper <- NULL
 final_metrics_out <- final_metrics_out  %>% 
   select( -MAE, -MAPE) %>%  
   mutate(model = recode(model, "ARABM"  = "Baseline", "ARABMwGT" = "Proposed")) %>%
