@@ -33,7 +33,8 @@ path_source_denguetracker_GT <- file.path(path_source_denguetracker_data, "gtren
 
 path_to_draws_BR <- file.path(file.path(dirname(dirname(path_proj)),"projects","draws","BR"))
 
-set_cmdstan_path(file.path(dirname(dirname(path_proj)),"cmdstan-2.32.0"))
+
+
 ```
 
 
@@ -85,39 +86,16 @@ ggplot(case_df, aes(x = date, y = cases, color = uf)) +
 ```
 
 ```{r}
-line_data <- data.frame(
-  uf = c(
-  "AC", "AL", "AP", "AM",  "BA", "CE", 
-  "DF", "GO", "MA", "MT", "MS", "MG", 
-  "PA", "PB", "PR", "PE", "PI", "RJ", 
-  "RN", "RS", "RO", "RR", "SC", "SP", 
-  "SE", "TO"
-),
-  vline_date = as.Date(c("2024-07-28", "2024-11-17", "2024-11-17", "2024-07-28", "2024-07-28", "2024-07-28", 
-                         "2024-07-28", "2024-07-28", "2024-07-28", "2024-07-28", "2024-07-28", "2024-07-28",
-                         "2024-07-28", "2024-07-28", "2024-07-28", "2024-09-29", "2024-07-28", "2024-07-28", 
-                         "2024-07-28", "2024-07-28", "2024-07-28", "2024-11-17", "2024-07-28", "2024-07-28",
-                         "2024-09-29", "2024-07-28"))
-)
-
-case_df <- case_df %>% 
-  filter(uf != "ES") %>%
-  mutate(uf = factor(uf, levels = brazil_ufs))
-line_data <- line_data %>%
-  mutate(uf = factor(uf, levels = brazil_ufs))
-
 actual_cases <- ggplot(case_df, aes(x = date, y = cases)) +
   geom_line(color = "steelblue", size = 0.8) +
-  geom_vline(data = line_data, 
-             aes(xintercept = vline_date), 
+  geom_vline(xintercept = as.Date("2024-07-28"), 
              linetype = "dashed", color = "black", size = 0.8) +
   facet_wrap(~ uf, scales = "free_y", ncol = 6) +
-  labs(title = NULL,
+  labs(title = "Dengue Case Trends per State",
        x = "Date", y = "Number of Cases") +
   theme_minimal(base_size = 12) +
   theme(
     strip.text = element_text(face = "bold"),
-    axis.text.x = element_text(angle = 45, hjust = 1),
     panel.background   = element_rect(fill = "white", colour = NA),
     plot.background    = element_rect(fill = "white", colour = NA),
     panel.grid.major   = element_line(colour = "grey90"),
@@ -126,37 +104,13 @@ actual_cases <- ggplot(case_df, aes(x = date, y = cases)) +
 
 
 print(actual_cases)
-ggsave(filename = file.path(path_proj, "plots_to_show", "BR", "actual_cases_diff_lines.png"),
-       plot = actual_cases,
-       width = 10, height = 8, dpi = 300)
-
-
-actual_cases_2 <- ggplot(case_df, aes(x = date, y = cases)) +
-  geom_line(color = "steelblue", size = 0.8) +
-  geom_vline(xintercept = as.Date("2024-07-28"), 
-             linetype = "dashed", color = "black", size = 0.8) +
-  facet_wrap(~ uf, scales = "free_y", ncol = 6) +
-  labs(title = NULL,
-       x = "Date", y = "Number of Cases") +
-  theme_minimal(base_size = 12) +
-  theme(
-    strip.text = element_text(face = "bold"),
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    panel.background   = element_rect(fill = "white", colour = NA),
-    plot.background    = element_rect(fill = "white", colour = NA),
-    panel.grid.major   = element_line(colour = "grey90"),
-    panel.grid.minor   = element_line(colour = "grey95")
-  )
-
-
-print(actual_cases_2)
 ggsave(filename = file.path(path_proj, "plots_to_show", "BR", "actual_cases.png"),
-       plot = actual_cases_2,
+       plot = actual_cases,
        width = 10, height = 8, dpi = 300)
 
 exposure <- case_df %>% group_by(uf) %>% mutate(exposure = max(cases)/3)%>%
   select(uf,exposure) %>% unique()
-exposure <- exposure
+exposure <- exposure[-8,]
 
 ```
 
@@ -262,19 +216,19 @@ t <- 1:(weeks_per_yr * 3)
 fourier_basis <- generate_fourier_basis(t, H_max = 10, period = weeks_per_yr)
 H_used <- 3
 
-all_states <- c(
-  "AC", "AL", "AP", "AM",
-  "BA", "CE", "DF", #"ES",
-  "GO", "MA", "MT", "MS",
-  "MG", "PA", "PB", "PR",
-  "PE", "PI", "RJ", "RN",
-  "RS", "RO", "RR", "SC",
-  "SP", "SE", "TO"
-)
-E_vec <- exposure$exposure
+# all_states <- c(
+#   "AC", "AL", "AP", "AM",
+#   "BA", "CE", "DF", #"ES",
+#   "GO", "MA", "MT", "MS",
+#   "MG", "PA", "PB", "PR",
+#   "PE", "PI", "RJ", "RN",
+#   "RS", "RO", "RR", "SC",
+#   "SP", "SE", "TO"
+# )       
+# E_vec <- exposure$exposure   
 
-# all_states <- c("RJ")
-# E_vec <-  exposure$exposure[18]
+all_states <- c("RJ")
+E_vec <-  exposure$exposure[18]
 
 include_GT <- T                      # if include GT
 
@@ -287,7 +241,7 @@ chain_num <- 4
 refresh <- 3000
 
 ew_start <- "202410"
-ew_end <- "202431"
+ew_end <- "202430"
 # step_size <- 5 # previous
 step_size <- 3
 ```
@@ -296,28 +250,19 @@ step_size <- 3
 # MCMC
 
 ```{r, message=FALSE}
-set.seed(1)
-## 1) Define once (before the loop)
-state_end_map <- c(AL = 202447L, AP = 202447L, RR = 202447L,   # Nov 17, 2024
-                   PE = 202440L, SE = 202440L)                 # Sep 29, 2024
-
-
 suppressMessages(
   suppressWarnings(
       for (i in seq_along(all_states)) {
         state_i <- all_states[i]
         E_val   <- E_vec[i]
+        cat(sprintf(">>> [MCMC %d/%d] State = %s ...\n", i, length(all_states), state_i))
         
-        end_i <- if (state_i %in% names(state_end_map)) state_end_map[[state_i]] else ew_end
-        cat(sprintf(">>> [MCMC %d/%d] State=%s | cutoff EW=%s ...\n", 
-                    i, length(all_states), state_i, end_i))
-
         # baseline (with actual value)
         baseline_i <- get_baseline_data(
           root_dir = path_source_denguetracker_data,
           states   = state_i,
           start    = ew_start,
-          end      = end_i,
+          end      = ew_end,
           time_unit = "week",
           last_n   = 10
         ) %>%
@@ -332,7 +277,7 @@ suppressMessages(
           root_dir_GT         = path_source_denguetracker_GT,
           state               = state_i,
           full_start          = ew_start,
-          full_end            = end_i,
+          full_end            = ew_end,
           step_size           = step_size,
           D                   = delay_D,
           hypers              = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
@@ -354,7 +299,7 @@ suppressMessages(
           root_dir_GT         = path_source_denguetracker_GT,
           state               = state_i,
           full_start          = ew_start,
-          full_end            = end_i,
+          full_end            = ew_end,
           step_size           = step_size,
           D                   = delay_D,
           hypers              = hypers_q(phi_ref = 0.2, D_ref = 15, type = "exponential",
@@ -376,6 +321,7 @@ suppressMessages(
       
     )
   )
+
 
 ```
 
@@ -410,8 +356,8 @@ suppressMessages(
           num_N_wGT <- ncol(fit_wGT$draws(variables = "N", format = "draws_matrix"))
           
           # draws
-          pred <- get_N_lastL_draws(results_i[[j]]$fit_object$output_files(), num_N, min(num_N, L), if_impute = T)
-          pred_wGT <- get_N_lastL_draws(results_wGT_i[[j]]$fit_object$output_files(), num_N_wGT, min(num_N, L), if_impute = T) # num_N is always smaller
+          pred <- get_N_lastL_draws(results_i[[j]]$fit_object$output_files(), num_N, min(num_N, L))
+          pred_wGT <- get_N_lastL_draws(results_wGT_i[[j]]$fit_object$output_files(), num_N_wGT, min(num_N, L)) # num_N is always smaller
           
           # get the case of actual sequence
           y_true <- true_data %>% filter(ew_start <= results_i[[j]]$window_end &
@@ -420,8 +366,8 @@ suppressMessages(
           y_true <- tail(y_true, min(num_N, L))
           
           # crps
-          tmp_crps[j] <- mean(scoringRules::crps_sample(y = y_true$sum_of_cases_final, dat = pred))
-          tmp_wGT_crps[j]  <- mean(scoringRules::crps_sample(y = y_true$sum_of_cases_final, dat = pred_wGT))
+          tmp_crps[j] <- mean(crps_sample(y = y_true$sum_of_cases_final, dat = pred))
+          tmp_wGT_crps[j]  <- mean(crps_sample(y = y_true$sum_of_cases_final, dat = pred_wGT))
           
           # 50%
           tmp_mcr50[j] <- coverage_rate_sample(y_true$sum_of_cases_final, pred, level = 0.50)
@@ -448,7 +394,6 @@ suppressMessages(
 ```
 
 ```{r}
-results_list <- list()
 all_metrics <- list()
 include_GT <- T
 
@@ -475,7 +420,6 @@ for (i in seq_along(all_states)) {
     group_by(ew_now) %>%
     slice_max(order_by = ew, n = n_last) %>%
     ungroup()
-  results_list[[state_i]] <- result_out_cut
   # true number of cases
   truth <- result_out_cut$sum_of_cases_final
   
@@ -540,90 +484,13 @@ readr::write_csv(final_metrics, file.path(out_dir, "multi_state_metrics_with_crp
 cat(">>> Done. Combined metrics saved to: ",
     file.path(out_dir, "multi_state_metrics_with_crps_coverage.csv"), "\n")
 
-final_metrics_out <- final_metrics %>% filter(model == "ARABM" | model == "ARABMwGT") 
-
 ```
 
 ```{r}
 library(writexl)
 
 # write
-write_xlsx(final_metrics, file.path(path_proj, "plots_to_show","BR","final_metrics_with_diff_ends.xlsx"))
-
-write_xlsx(final_metrics_out, file.path(path_proj, "plots_to_show","BR","final_metrics_with_diff_ends_2m.xlsx"))
-```
-
-```{r}
-# states_in_paper <- c("AM", "RJ", "RN")
-states_in_paper <- NULL
-final_metrics_out <- final_metrics_out  %>% 
-  select( -MAE, -MAPE) %>%  
-  mutate(model = recode(model, "ARABM"  = "Baseline", "ARABMwGT" = "Proposed")) %>%
-    pivot_wider(
-    id_cols = state,
-    names_from = model,
-    values_from = c(RMSE, RMSPE, crps, mcr95, mcr50),
-    names_glue = "{.value}:{model}"
-  ) %>%
-  mutate(across(where(is.numeric), ~ round(.x, 2)))
-
-results_paper <- final_metrics_out %>% filter(state %in% states_in_paper)
-results_sm <- final_metrics_out %>% filter(!(state %in% states_in_paper))
-
-metrics <- c("RMSE", "RMSPE", "crps", "mcr95", "mcr50")
-df_paper <- highlight_metric_pairs_simple(
-      df_wide    = results_paper,
-      metrics    = metrics,
-      directions = c(RMSE="lower", RMSPE="lower", mcr95="closer", mcr50="closer", crps="lower"),
-      targets    = c(CR95=0.95, CR50=0.50),  # or 95/50 if your data are percentages
-      color = "red",
-      tie_highlight = FALSE                   # <- no highlight on ties
-)
-
-cat(render_latex_metric_pairs(
-      df_print = df_paper,
-      caption  = paste0("Baseline vs Proposed across metrics (", scenario = scenarios[j], "; last ", 1  ," weeks)")
-))
-
-```
-
-```{r}
-df_sm <- highlight_metric_pairs_simple(
-      df_wide    = results_sm,
-      metrics    = metrics,
-      directions = c(RMSE="lower", RMSPE="lower", mcr95="closer", mcr50="closer", crps="lower"),
-      targets    = c(CR95=0.95, CR50=0.50),  # or 95/50 if your data are percentages
-      color = "red",
-      tie_highlight = FALSE                   # <- no highlight on ties
-)
-
-cat(render_latex_metric_pairs(
-      df_print = df_sm,
-      caption  = paste0("Baseline vs Proposed across metrics (", scenario = scenarios[j], "; last ", 1  ," weeks)")
-))
-
-```
-
-
-```{r}
-library(ggplot2)
-
-# 定义数据
-df <- data.frame(
-  type = c("Historical data (no snapshots)", "Runoff triangle snapshots"),
-  start = as.Date(c("2022-03-10", "2024-03-10")),
-  end   = as.Date(c("2024-03-10", "2025-05-11"))
-)
-
-# 绘制图
-ggplot(df) +
-  geom_segment(aes(x = start, xend = end, y = type, yend = type, color = type),
-               size = 6, lineend = "butt") +
-  scale_color_manual(values = c("skyblue", "salmon")) +
-  theme_minimal(base_size = 14) +
-  labs(title = "Timeline of Dengue Surveillance Data",
-       x = "Date", y = "") +
-  theme(legend.position = "bottom")
+write_xlsx(final_metrics, file.path(path_proj, "plots_to_show","BR","final_metrics.xlsx"))
 
 ```
 

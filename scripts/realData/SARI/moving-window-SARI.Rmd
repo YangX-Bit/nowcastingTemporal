@@ -126,7 +126,7 @@ seed <- 123
 
 set.seed(seed)
 #D <- 10
-D <- 15
+D <- 26
 N_obs <- 200
 
 # try-on in region 41002
@@ -207,7 +207,7 @@ H_used <- 3
 # scoreRange_SARI
 # first_date <- as.Date("2009-06-14")
 
-scoreRange_SARI <- seq(as.Date("2015-03-08"),as.Date("2015-09-27"), by = "2 week")
+scoreRange_SARI <- seq(as.Date("2015-03-22"),as.Date("2015-09-28"), by = "4 week")
 
 first_date <- as.Date("2014-01-01")
 start_date_tri <- as.Date("2015-01-04 ")
@@ -222,12 +222,12 @@ out_SARI <- nowcasting_moving_window_with_temporal(SARI_collapsed_input,  scoreR
                                 methods = models_to_use,
                                 compiled_models = compiled_models,
                                 S = H_used * 2, bases_s = fourier_basis[, 1:(H_used * 2)],
-                                E = 70,
+                                E = 50,
                                 iter_sampling = 2500, iter_warmup = 1000, refresh = 0,
                                 num_chains = 4, suppress_output = T,
                                 posterior_draws_path = path_to_draws_BR, hypers = hypers)
-# save(out_SARI, file = file.path(path_proj, "data", "fitted_model","SARI_090802_to_901122_D=26.RData"))
-# load( file.path(path_proj, "data", "fitted_model","SARI_090802_to_901122_D=26.RData"))
+save(out_SARI, file = file.path(path_proj, "data", "results", "SARI","SARI_090802_to_901122_D=26.RData"))
+# load( file.path(path_proj, "data", "results", "SARI","SARI_090802_to_901122_D=15.RData"))
 #case_true - as.numeric(data_41002_input[,26])
 
 # mat_y <- normalize_matrix_columns(data41002_exp_plot)
@@ -235,6 +235,37 @@ out_SARI <- nowcasting_moving_window_with_temporal(SARI_collapsed_input,  scoreR
 # last_reported <- as.matrix(data_41002[, c("Notifications_within_26w")])
 # rownames(last_reported) <- as.character(data_41002$date)
 ```
+
+```{r, warning=F}
+L <- 1
+
+tmp_crps <- tmp_hist_crps <- numeric(length(out_SARI$dates))
+tmp_mcr50 <- tmp_hist_mcr50 <- numeric(length(out_SARI$dates))
+tmp_mcr95 <- tmp_hist_mcr95 <- numeric(length(out_SARI$dates))
+
+for (i in 1:length(out_SARI$dates)) {
+  num_N <- ncol(out_SARI$baseline2[[i]]$draws(variables = "N", format = "draws_matrix"))
+  num_N_hist <- ncol(out_SARI$proposed[[i]]$draws(variables = "N", format = "draws_matrix"))
+  
+  pred <- get_N_lastL_draws(out_SARI$baseline2[[i]]$output_files(), num_N, min(num_N, L), if_impute = T)
+  pred_hist <- get_N_lastL_draws(out_SARI$proposed[[i]]$output_files(), num_N, min(num_N, L), if_impute = T)
+  
+  y_true <- as.numeric(tail(out_SARI$case_true[[i]], min(num_N, L)))
+    # crps
+  tmp_crps[i] <- mean(scoringRules::crps_sample(y = y_true, dat = pred))
+  tmp_hist_crps[i]  <- mean(scoringRules::crps_sample(y = y_true, dat = pred_hist))
+  
+  # 50%
+  tmp_mcr50[i] <- coverage_rate_sample(y_true, pred, level = 0.50)
+  tmp_hist_mcr50[i]  <- coverage_rate_sample(y_true, pred_hist,  level = 0.50)
+  # 95%
+  tmp_mcr95[i] <- coverage_rate_sample(y_true, pred, level = 0.95)
+  tmp_hist_mcr95[i]  <- coverage_rate_sample(y_true, pred_hist,  level = 0.95)
+}
+
+```
+
+
 
 ```{r}
 library(dplyr)
@@ -275,11 +306,6 @@ calc_metrics <- function(df) {
       safe_mape(df$mean_baseline, truth),
       safe_mape(df$mean_baseline2, truth),
       safe_mape(df$mean_proposed, truth)
-    ),
-    CR95  = c(
-      coverage_rate(truth, df$lower_baseline, df$upper_baseline),
-      coverage_rate(truth, df$lower_baseline2, df$upper_baseline2),
-      coverage_rate(truth, df$lower_proposed, df$upper_proposed)
     )
   )
 }
@@ -289,30 +315,121 @@ results_SARI <- nowcasts_table(out_SARI, D = D, report_unit = "week",
                           methods = models_to_use, N_num = N_num)
 # names(results_SARI) <- sapply(scoreRange_SARI, function(x) TeX(as.character(x), bold = TRUE))
 
-# 应用到整个 list
+#  list
 final_metrics <- lapply(results_SARI, calc_metrics)
 
-# 如果想合并成一张大表，可以加上日期（list 的名字）
-# final_metrics <- bind_rows(
-#   lapply(names(results_SARI), function(nm) {
-#     calc_metrics(results_SARI[[nm]]) %>% mutate(date_now = nm)
-#   })
-# )
+
 df <- results_SARI
 print(final_metrics)
 
-final_metrics_out <- bind_rows(final_metrics)
+for (i in 1:length(out_SARI$dates)) {
+  crps_sari <- as.numeric(c(NA, tmp_crps[[i]], tmp_hist_crps[[i]]))
+  mcr95_sari <- as.numeric(c(NA, tmp_mcr95[[i]], tmp_hist_mcr95[[i]]))
+  mcr50_sari <- as.numeric(c(NA, tmp_mcr50[[i]], tmp_hist_mcr50[[i]]))
+  final_metrics[[i]]$crps <- crps_sari
+  final_metrics[[i]]$mcr95 <- mcr95_sari
+  final_metrics[[i]]$mcr50 <- mcr50_sari
+}
 
+
+final_avg <- bind_rows(final_metrics, .id = "id") %>%
+  group_by(model) %>%
+  summarise(
+    RMSE  = round(mean(RMSE,  na.rm = TRUE), 2),
+    RMSPE = round(mean(RMSPE, na.rm = TRUE), 2),
+    MAE   = round(mean(MAE,   na.rm = TRUE), 2),
+    MAPE  = round(mean(MAPE,  na.rm = TRUE), 2),
+    crps  = round(mean(crps,  na.rm = TRUE), 2),
+    mcr95 = round(mean(mcr95, na.rm = TRUE), 2),
+    mcr50 = round(mean(mcr50, na.rm = TRUE), 2),
+    .groups = "drop"
+  ) %>% filter(model != "baseline")  %>%
+  select(-c("MAE", "MAPE"))
+
+print(final_avg)
+
+xtable(final_avg, digits = 2, 
+         caption = "Model comparison of error metrics")
 #
+final_metrics_out <- bind_rows(final_metrics) %>%  filter(model != "baseline")
+
+xtable(final_metrics_out, digits = 2, 
+         caption = "Model comparison of error metrics")
 ```
 
 ```{r}
 library(writexl)
 
 # write
-write_xlsx(final_metrics_out, file.path(path_proj, "plots_to_show","SARI","final_metrics_D15.xlsx"))
+write_xlsx(final_metrics_out, file.path(path_proj, "plots_to_show","SARI","final_metrics_D26.xlsx"))
 
 ```
+
+```{r}
+final_wide <- final_metrics_out %>%
+  mutate(time = rep(1:(n()/2), each = 2)) %>%  
+  pivot_wider(
+    id_cols = time,
+    names_from = model,
+    values_from = c(RMSE, RMSPE, crps, mcr95, mcr50)
+  ) %>% mutate(time = as.character(scoreRange_SARI)) %>%
+   mutate(across(where(is.numeric), ~ round(.x, 2)))
+
+make_latex_table <- function(df) {
+  out <- "\\begin{table}[!h]\\footnotesize
+\\centering
+\\begin{tabular}[t]{c *{10}{c}}
+\\toprule
+ & \\multicolumn{2}{c}{RMSE} & \\multicolumn{2}{c}{RMSPE} & \\multicolumn{2}{c}{CRPS} & \\multicolumn{2}{c}{MCR95} & \\multicolumn{2}{c}{MCR50} \\\\
+\\cmidrule(l{3pt}r{3pt}){2-3} \\cmidrule(l{3pt}r{3pt}){4-5} \\cmidrule(l{3pt}r{3pt}){6-7} \\cmidrule(l{3pt}r{3pt}){8-9} \\cmidrule(l{3pt}r{3pt}){10-11}
+ & Baseline & Proposed & Baseline & Proposed & Baseline & Proposed & Baseline & Proposed & Baseline & Proposed\\\\
+\\midrule
+"
+
+  for (i in seq_len(nrow(df))) {
+    row <- df[i, ]
+
+    hl <- function(b, p, smaller_is_better = TRUE) {
+      if (is.na(b) | is.na(p)) return(c(b, p))
+      
+      b <- as.numeric(b)
+      p <- as.numeric(p)
+      
+      # if tie
+      if (isTRUE(all.equal(b, p))) {
+        return(c(b, p))
+      }
+      
+      if (smaller_is_better) {
+        if (p < b) c(b, paste0("\\textcolor{red}{\\textbf{", p, "}}"))
+        else       c(paste0("\\textcolor{red}{\\textbf{", b, "}}"), p)
+      } else {
+        if (p > b) c(b, paste0("\\textcolor{red}{\\textbf{", p, "}}"))
+        else       c(paste0("\\textcolor{red}{\\textbf{", b, "}}"), p)
+      }
+    }
+
+    vals <- c(
+      hl(row$RMSE_baseline2,  row$RMSE_proposed,  smaller_is_better = TRUE),
+      hl(row$RMSPE_baseline2, row$RMSPE_proposed, smaller_is_better = TRUE),
+      hl(row$crps_baseline2,  row$crps_proposed,  smaller_is_better = TRUE),
+      hl(row$mcr95_baseline2, row$mcr95_proposed, smaller_is_better = FALSE),
+      hl(row$mcr50_baseline2, row$mcr50_proposed, smaller_is_better = FALSE)
+    )
+
+    out <- paste0(out, row$time, " & ", paste(vals, collapse = " & "), " \\\\\n")
+  }
+
+  out <- paste0(out, "\\bottomrule\n\\end{tabular}\n\\end{table}")
+  return(out)
+}
+
+latex_code <- make_latex_table(final_wide)
+cat(latex_code)
+
+```
+
+
 
 ```{r}
 
@@ -1172,5 +1289,23 @@ for(t in 5:5) {
   # Optionally save the plot, for example:
   # ggsave(paste0("plot_T", t, ".png"), p, width = 12, height = 6)
 }
+```
+
+
+```{r}
+out_SARI_D26 <- nowcasting_moving_window_with_temporal(SARI_collapsed_input,  scoreRange = scoreRange_SARI,
+                                case_true = case_true,
+                                start_date = first_date,
+                                start_date_triangular = start_date_tri,
+                                D = 26,
+                                methods = models_to_use,
+                                compiled_models = compiled_models,
+                                S = H_used * 2, bases_s = fourier_basis[, 1:(H_used * 2)],
+                                E = 40,
+                                iter_sampling = 2500, iter_warmup = 1000, refresh = 0,
+                                num_chains = 4, suppress_output = T,
+                                posterior_draws_path = path_to_draws_BR, hypers = hypers)
+save(out_SARI_D26, file = file.path(path_proj, "data", "results", "SARI","SARI_090802_to_901122_D=26.RData"))
+
 ```
 
