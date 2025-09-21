@@ -38,7 +38,7 @@ path_to_draws_BR <- file.path(file.path(dirname(dirname(path_proj)),"projects","
 ```
 
 
-```{r}
+```{r, warning = F}
 brazil_ufs <- c(
   "AC", "AL", "AP", "AM",
   "BA", "CE", "DF", "ES",
@@ -48,13 +48,14 @@ brazil_ufs <- c(
   "RS", "RO", "RR", "SC",
   "SP", "SE", "TO"
 )
-
+# cut_off <- 62
+cut_off <- 200
 case_data <- list()
 case_date <- tail(readr::read_csv(file.path(path_source_denguetracker_infodengue,
-                                             202519,paste0("AC","_","2025-05-11","_infodengue.csv"))),62)$ew_start
+                                             202519,paste0("AC","_","2025-05-11","_infodengue.csv"))),cut_off)$ew_start
 for (i in 1:length(brazil_ufs)) {
   case_data[[brazil_ufs[i]]] <- tail(readr::read_csv(file.path(path_source_denguetracker_infodengue,
-                                             202519,paste0(brazil_ufs[i],"_","2025-05-11","_infodengue.csv"))),62)$sum_of_cases  
+                                             202519,paste0(brazil_ufs[i],"_","2025-05-11","_infodengue.csv"))),cut_off)$sum_of_cases  
 }
 ```
 
