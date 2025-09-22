@@ -118,7 +118,7 @@ exposure <- exposure[-8,]
 ## the test
 ### function
 ```{r}
-# 更稳健的误差函数（避免 actual = 0 时除零）
+# avoid when actual = 0
 safe_rmspe <- function(pred, actual, eps = 1e-8) {
   sqrt(mean(((pred - actual) / pmax(actual, eps))^2, na.rm = TRUE)) * 100
 }
@@ -128,36 +128,11 @@ safe_mape <- function(pred, actual, eps = 1e-8) {
 rmse_fun <- function(pred, actual) sqrt(mean((pred - actual)^2, na.rm = TRUE))
 mae_fun  <- function(pred, actual) mean(abs(pred - actual), na.rm = TRUE)
 
-# 覆盖率
+# covrage rate
 coverage_rate <- function(truth, lwr, upr) {
   mean(truth >= lwr & truth <= upr, na.rm = TRUE)
 }
 
-# 基于正态近似的 CRPS（用 95% 区间反推 σ，再计算 CRPS(N(μ,σ), y)）
-crps_normal_vec <- function(y, mu, lwr95, upr95) {
-  z975 <- qnorm(0.975)
-  sigma <- (upr95 - lwr95) / (2 * z975)
-  # 避免 sigma = 0
-  sigma <- pmax(sigma, 1e-8)
-  z <- (y - mu) / sigma
-  # φ 和 Φ
-  phi <- dnorm(z)
-  Phi <- pnorm(z)
-  # CRPS 公式：σ [ 1/√π - 2 φ(z) - z(2Φ(z)-1) ]
-  crps <- sigma * (1 / sqrt(pi) - 2 * phi - z * (2 * Phi - 1))
-  mean(crps, na.rm = TRUE)
-}
-
-# 由 95% 区间近似出 50% 区间（正态：μ ± z0.75 * σ）
-make_50_ci_from_95 <- function(mu, lwr95, upr95) {
-  z975 <- qnorm(0.975)
-  z075 <- qnorm(0.75)  # 0.6744898
-  sigma <- (upr95 - lwr95) / (2 * z975)
-  sigma <- pmax(sigma, 1e-8)
-  lwr50 <- mu - z075 * sigma
-  upr50 <- mu + z075 * sigma
-  list(lwr50 = lwr50, upr50 = upr50)
-}
 
 generate_fourier_basis <- function(weeks, H_max = 3, period = 52) {
   if (inherits(weeks, "Date")) {
@@ -208,7 +183,6 @@ error_metrics <- function(predicted, actual) {
 ```
 
 ```{r}
-# 拆分保存目录
 fit_dir <- file.path(path_proj, "outputs", "fits")
 dir.create(fit_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -217,19 +191,19 @@ t <- 1:(weeks_per_yr * 3)
 fourier_basis <- generate_fourier_basis(t, H_max = 10, period = weeks_per_yr)
 H_used <- 3
 
-# all_states <- c(
-#   "AC", "AL", "AP", "AM",
-#   "BA", "CE", "DF", #"ES",
-#   "GO", "MA", "MT", "MS",
-#   "MG", "PA", "PB", "PR",
-#   "PE", "PI", "RJ", "RN",
-#   "RS", "RO", "RR", "SC",
-#   "SP", "SE", "TO"
-# )       
-# E_vec <- exposure$exposure   
+ all_states <- c(
+   "AC", "AL", "AP", "AM",
+   "BA", "CE", "DF", #"ES",
+   "GO", "MA", "MT", "MS",
+   "MG", "PA", "PB", "PR",
+   "PE", "PI", "RJ", "RN",
+   "RS", "RO", "RR", "SC",
+   "SP", "SE", "TO"
+ )       
+ E_vec <- exposure$exposure   
 
-all_states <- c("RJ")
-E_vec <-  exposure$exposure[18]
+#all_states <- c("SP")
+#E_vec <-  exposure$exposure[24]
 
 include_GT <- T                      # if include GT
 
@@ -251,6 +225,8 @@ step_size <- 3
 # MCMC
 
 ```{r, message=FALSE}
+set.seed(123)
+
 suppressMessages(
   suppressWarnings(
       for (i in seq_along(all_states)) {
@@ -271,6 +247,21 @@ suppressMessages(
                            state = state_i,
                            202511)
         saveRDS(baseline_i, file.path(fit_dir, sprintf("%s_baseline.rds", state_i)))
+      }
+    )
+  )
+
+```
+
+```{r, message=FALSE}
+set.seed(123)
+
+suppressMessages(
+  suppressWarnings(
+      for (i in seq_along(all_states)) {
+        state_i <- all_states[i]
+        E_val   <- E_vec[i]
+        cat(sprintf(">>> [MCMC %d/%d] State = %s ...\n", i, length(all_states), state_i))
         
         # M 1：ARABM
         results_i <- run_moving_window(
@@ -293,6 +284,21 @@ suppressMessages(
           posterior_draws_path = path_to_draws_BR
         )
         saveRDS(results_i, file.path(fit_dir, sprintf("%s_ARABM_fit.rds", state_i)))
+      }
+    )
+  )
+
+```
+
+```{r, message=FALSE}
+set.seed(123)
+
+suppressMessages(
+  suppressWarnings(
+      for (i in seq_along(all_states)) {
+        state_i <- all_states[i]
+        E_val   <- E_vec[i]
+        cat(sprintf(">>> [MCMC %d/%d] State = %s ...\n", i, length(all_states), state_i))
         
         # M 2：ARABMwGT (GT + seasonality + E)
         results_wGT_i <- run_moving_window(
@@ -319,10 +325,8 @@ suppressMessages(
         )
         saveRDS(results_wGT_i, file.path(fit_dir, sprintf("%s_ARABMwGT_fit.rds", state_i)))
       }
-      
     )
   )
-
 
 ```
 
@@ -359,6 +363,9 @@ suppressMessages(
           # draws
           pred <- get_N_lastL_draws(results_i[[j]]$fit_object$output_files(), num_N, min(num_N, L))
           pred_wGT <- get_N_lastL_draws(results_wGT_i[[j]]$fit_object$output_files(), num_N_wGT, min(num_N, L)) # num_N is always smaller
+          
+          pred <- pred[, colSums(is.na(pred)) < nrow(pred)]
+          pred_wGT <- pred_wGT[, colSums(is.na(pred_wGT)) < nrow(pred_wGT)]
           
           # get the case of actual sequence
           y_true <- true_data %>% filter(ew_start <= results_i[[j]]$window_end &
@@ -407,7 +414,7 @@ for (i in seq_along(all_states)) {
   results_i    <- readRDS(file.path(fit_dir, sprintf("%s_ARABM_fit.rds", state_i)))
   results_wGT_i<- readRDS(file.path(fit_dir, sprintf("%s_ARABMwGT_fit.rds", state_i)))
   # results
-  arabm_i     <- extract_N_summary(results_i,    num_N = 4) # 默认名：ARABM, ARABM_lwr, ARABM_upr
+  arabm_i     <- extract_N_summary(results_i,    num_N = 4) # 
   arabm_wGT_i <- extract_N_summary(results_wGT_i,num_N = 4, model_name = "ARABMwGT")
   
   result_out_i <- baseline_i %>%
@@ -416,7 +423,7 @@ for (i in seq_along(all_states)) {
     left_join(arabm_wGT_i %>% select(ew_now, ew, ARABMwGT, ARABMwGT_lwr, ARABMwGT_upr),
               by = c("ew_now", "ew"))
   # get the latest week
-  n_last <- 4
+  n_last <- L
   result_out_cut <- result_out_i %>%
     filter(!is.na(ARABM)) %>%
     group_by(ew_now) %>%
@@ -427,34 +434,42 @@ for (i in seq_along(all_states)) {
   
   result_list_allstates[[state_i]] <- result_out_cut
   
-   #— calc metrics
-  metric_tbl <- tibble(
-    state  = state_i,
-    model  = c("Bastos", "ARABM", "ARABMwGT"),
-    RMSE   = c(
-      rmse_fun(result_out_cut$cases_est_id, truth),
-      rmse_fun(result_out_cut$ARABM,        truth),
-      rmse_fun(result_out_cut$ARABMwGT,     truth)
-    ),
-    RMSPE  = c(
-      safe_rmspe(result_out_cut$cases_est_id, truth),
-      safe_rmspe(result_out_cut$ARABM,        truth),
-      safe_rmspe(result_out_cut$ARABMwGT,     truth)
-    ),
-    MAE    = c(
-      mae_fun(result_out_cut$cases_est_id, truth),
-      mae_fun(result_out_cut$ARABM,        truth),
-      mae_fun(result_out_cut$ARABMwGT,     truth)
-    ),
-    MAPE   = c(
-      safe_mape(result_out_cut$cases_est_id, truth),
-      safe_mape(result_out_cut$ARABM,        truth),
-      safe_mape(result_out_cut$ARABMwGT,     truth)
-    ),
-    crps   = c(NA_real_, interval_metrics_list[[i]]$crps_out, interval_metrics_list[[i]]$crps_wGT_out), 
-    mcr95   = c(NA_real_, interval_metrics_list[[i]]$mcr95_out, interval_metrics_list[[i]]$mcr95_wGT_out),
-    mcr50   = c(NA_real_, interval_metrics_list[[i]]$mcr50_out, interval_metrics_list[[i]]$mcr50_wGT_out)
+  metric_tbl_all <- result_out_cut %>%
+    pivot_longer(
+      cols = c(cases_est_id, ARABM, ARABMwGT),
+      names_to = "model",
+      values_to = "pred"
+    ) %>% mutate(model = recode(model, cases_est_id = "Bastos")) %>%
+    select(file_date, model, pred, sum_of_cases_final) %>%
+   group_by(file_date, model) %>%
+    summarise(
+      RMSE  = rmse_fun(pred, sum_of_cases_final),
+      RMSPE = safe_rmspe(pred, sum_of_cases_final),
+      MAE   = mae_fun(pred, sum_of_cases_final),
+      MAPE  = safe_mape(pred, sum_of_cases_final),
+      .groups = "drop"
+    )  
+  
+  metric_tbl <- metric_tbl_all %>%   group_by(model) %>%
+  summarise(
+    RMSE  = mean(RMSE,  na.rm = TRUE),
+    RMSPE = mean(RMSPE, na.rm = TRUE),
+    MAE   = mean(MAE,   na.rm = TRUE),
+    MAPE  = mean(MAPE,  na.rm = TRUE),
+    .groups = "drop"
+  )%>%  mutate(state = state_i) %>%
+    relocate(state, model) 
+  
+  interval_tbl <- tibble(
+  model = c("Bastos", "ARABM", "ARABMwGT"),
+  crps  = c(NA_real_, interval_metrics_list[[i]]$crps_out,   interval_metrics_list[[i]]$crps_wGT_out),
+  mcr95 = c(NA_real_, interval_metrics_list[[i]]$mcr95_out,  interval_metrics_list[[i]]$mcr95_wGT_out),
+  mcr50 = c(NA_real_, interval_metrics_list[[i]]$mcr50_out,  interval_metrics_list[[i]]$mcr50_wGT_out)
   )
+
+  metric_tbl <- metric_tbl %>%
+    left_join(interval_tbl, by = "model") %>%
+    relocate(state, model, RMSE, RMSPE, MAE, MAPE, crps, mcr95, mcr50)
   
   # optional for GT
   if (include_GT && "GT" %in% names(result_out_cut)) {
@@ -508,16 +523,15 @@ final_metrics_out <- final_metrics %>%
 
 final_metrics_out_hl <- highlight_metric_pairs_simple(
       df_wide    = final_metrics_out,
-      metrics    = metrics,
-      directions = c(RMSE="lower", RMSPE="lower", CR95="closer", CR50="closer", CRPS="lower"),
+      metrics    = c("RMSE", "RMSPE", "crps" ,"mcr95", "mcr50"),
+      directions = c(RMSE="lower", RMSPE="lower", mcr95="closer", mcr50="closer", crps="lower"),
       targets    = c(CR95=0.95, CR50=0.50),  # or 95/50 if your data are percentages
       color = "red",
       tie_highlight = FALSE                   # <- no highlight on ties
 )
 
 cat(render_latex_metric_pairs(
-    df_print = final_metrics_out_hl,
-    caption  = paste0("Baseline vs Proposed across metrics (", scenario = scenarios[j], "; last ", last_lens[i]  ," weeks)" )))
+    df_print = final_metrics_out_hl))
 
 
 ```
