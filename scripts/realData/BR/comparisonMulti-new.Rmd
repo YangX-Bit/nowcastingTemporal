@@ -488,6 +488,38 @@ cat(">>> Done. Combined metrics saved to: ",
 ```
 
 ```{r}
+library(dplyr)
+library(tidyr)
+# for latex table
+
+final_metrics_out <- final_metrics %>%
+  filter(model %in% c("ARABM", "ARABMwGT")) %>%
+  mutate(model = recode(model, ARABM = "Baseline", ARABMwGT = "Proposed")) %>%
+  # wider
+  pivot_wider(
+    id_cols = state, names_from = model,
+    values_from = c(RMSE, RMSPE, crps, mcr95, mcr50),
+    names_glue = "{.value}:{model}"
+  ) %>%
+  mutate(across(where(is.numeric), ~round(.x,2)))
+
+final_metrics_out_hl <- highlight_metric_pairs_simple(
+      df_wide    = final_metrics_out,
+      metrics    = metrics,
+      directions = c(RMSE="lower", RMSPE="lower", CR95="closer", CR50="closer", CRPS="lower"),
+      targets    = c(CR95=0.95, CR50=0.50),  # or 95/50 if your data are percentages
+      color = "red",
+      tie_highlight = FALSE                   # <- no highlight on ties
+)
+
+cat(render_latex_metric_pairs(
+    df_print = final_metrics_out_hl,
+    caption  = paste0("Baseline vs Proposed across metrics (", scenario = scenarios[j], "; last ", last_lens[i]  ," weeks)" )))
+
+
+```
+
+```{r}
 library(writexl)
 
 # write
