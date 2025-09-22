@@ -206,6 +206,7 @@ H_used <- 3
 # scoreRange_SARI <- seq(as.Date("2009-08-02"),as.Date("2009-11-22"), by = "4 week")
 # scoreRange_SARI
 # first_date <- as.Date("2009-06-14")
+set.seed(seed)
 
 scoreRange_SARI <- seq(as.Date("2015-03-22"),as.Date("2015-09-28"), by = "4 week")
 
@@ -237,7 +238,7 @@ save(out_SARI, file = file.path(path_proj, "data", "results", "SARI","SARI_09080
 ```
 
 ```{r, warning=F}
-L <- 1
+L <- 4
 
 tmp_crps <- tmp_hist_crps <- numeric(length(out_SARI$dates))
 tmp_mcr50 <- tmp_hist_mcr50 <- numeric(length(out_SARI$dates))
@@ -389,33 +390,41 @@ make_latex_table <- function(df) {
   for (i in seq_len(nrow(df))) {
     row <- df[i, ]
 
-    hl <- function(b, p, smaller_is_better = TRUE) {
+    hl <- function(b, p, mode = "smaller", target = 1) {
       if (is.na(b) | is.na(p)) return(c(b, p))
       
       b <- as.numeric(b)
       p <- as.numeric(p)
-      
-      # if tie
+
       if (isTRUE(all.equal(b, p))) {
         return(c(b, p))
       }
       
-      if (smaller_is_better) {
+      if (mode == "smaller") {
         if (p < b) c(b, paste0("\\textcolor{red}{\\textbf{", p, "}}"))
         else       c(paste0("\\textcolor{red}{\\textbf{", b, "}}"), p)
-      } else {
+        
+      } else if (mode == "larger") {
         if (p > b) c(b, paste0("\\textcolor{red}{\\textbf{", p, "}}"))
         else       c(paste0("\\textcolor{red}{\\textbf{", b, "}}"), p)
+        
+      } else if (mode == "closer") {
+        dist_b <- abs(b - target)
+        dist_p <- abs(p - target)
+        if (dist_p < dist_b) c(b, paste0("\\textcolor{red}{\\textbf{", p, "}}"))
+        else                 c(paste0("\\textcolor{red}{\\textbf{", b, "}}"), p)
       }
     }
 
+
     vals <- c(
-      hl(row$RMSE_baseline2,  row$RMSE_proposed,  smaller_is_better = TRUE),
-      hl(row$RMSPE_baseline2, row$RMSPE_proposed, smaller_is_better = TRUE),
-      hl(row$crps_baseline2,  row$crps_proposed,  smaller_is_better = TRUE),
-      hl(row$mcr95_baseline2, row$mcr95_proposed, smaller_is_better = FALSE),
-      hl(row$mcr50_baseline2, row$mcr50_proposed, smaller_is_better = FALSE)
+      hl(row$RMSE_baseline2,  row$RMSE_proposed,  mode = "smaller"),
+      hl(row$RMSPE_baseline2, row$RMSPE_proposed, mode = "smaller"),
+      hl(row$crps_baseline2,  row$crps_proposed,  mode = "smaller"),
+      hl(row$mcr95_baseline2, row$mcr95_proposed, mode = "closer", target = 0.95),
+      hl(row$mcr50_baseline2, row$mcr50_proposed, mode = "closer", target = 0.5)
     )
+
 
     out <- paste0(out, row$time, " & ", paste(vals, collapse = " & "), " \\\\\n")
   }
