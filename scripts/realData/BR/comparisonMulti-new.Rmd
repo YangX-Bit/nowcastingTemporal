@@ -397,6 +397,7 @@ suppressMessages(
 ```{r}
 all_metrics <- list()
 include_GT <- T
+result_list_allstates <- list()
 
 for (i in seq_along(all_states)) {
   state_i <- all_states[i]
@@ -415,7 +416,7 @@ for (i in seq_along(all_states)) {
     left_join(arabm_wGT_i %>% select(ew_now, ew, ARABMwGT, ARABMwGT_lwr, ARABMwGT_upr),
               by = c("ew_now", "ew"))
   # get the latest week
-  n_last <- 1
+  n_last <- 4
   result_out_cut <- result_out_i %>%
     filter(!is.na(ARABM)) %>%
     group_by(ew_now) %>%
@@ -423,6 +424,8 @@ for (i in seq_along(all_states)) {
     ungroup()
   # true number of cases
   truth <- result_out_cut$sum_of_cases_final
+  
+  result_list_allstates[[state_i]] <- result_out_cut
   
    #— calc metrics
   metric_tbl <- tibble(
