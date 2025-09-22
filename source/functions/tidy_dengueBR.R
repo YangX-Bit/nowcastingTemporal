@@ -161,7 +161,7 @@ get_infodengue_data <- function(
       for (r in seq_len(N)) {
         for (c in 2:(D + 1)) {
           if (is.na(M[r, c])) {
-            M[r, c] <- M[r, c - 1]
+            M[r, c] <- (M[r, c - 1] + M[r, c + 1])/2
           }
         }
       }
