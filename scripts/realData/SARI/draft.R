@@ -234,10 +234,33 @@ nowcasts_table <- function(results_list,
   
   return(nowcasts_out)
 }
-
 model_name <- "proposed"
-
 results_list <- out_SARI
+wks <- N_all
 
-nowcasts_table(out_SARI, D = D, report_unit = "week", 
-               methods = models_to_use)
+results_SARI <- nowcasts_table(out_SARI, D = D, report_unit = "week", 
+                               methods = models_to_use, N_num = N_num)
+
+
+get_N_lastL_draws <- function(files, wks, L, if_impute = FALSE) {
+  fit2 <- as_cmdstan_fit(files)
+  vars <- paste0("N[", (wks - L + 1):wks, "]")
+  dm   <- fit2$draws(variables = vars, format = "draws_matrix")  # draws x L
+  mat  <- t(dm)  # L x draws
+  rm(fit2, dm); gc()
+  
+  if (if_impute) {
+    for (i in 1:nrow(mat)) {
+      if (anyNA(mat[i, ])) {
+        row_mean <- mean(mat[i, ], na.rm = TRUE)
+        mat[i, is.na(mat[i, ])] <- row_mean
+      }
+    }
+  }
+  
+  mat
+}
+
+files <- out_SARI$proposed[[i]]$output_files()
+wks <- num_N
+get_N_lastL_draws(out_SARI$proposed[[i]]$output_files(), num_N, min(num_N, L), if_impute = T)

@@ -126,7 +126,7 @@ seed <- 123
 
 set.seed(seed)
 #D <- 10
-D <- 26
+D <- 15
 N_obs <- 200
 
 # try-on in region 41002
@@ -227,7 +227,7 @@ out_SARI <- nowcasting_moving_window_with_temporal(SARI_collapsed_input,  scoreR
                                 iter_sampling = 2500, iter_warmup = 1000, refresh = 0,
                                 num_chains = 4, suppress_output = T,
                                 posterior_draws_path = path_to_draws_BR, hypers = hypers)
-save(out_SARI, file = file.path(path_proj, "data", "results", "SARI","SARI_090802_to_901122_D=26.RData"))
+save(out_SARI, file = file.path(path_proj, "data", "results", "SARI","SARI_090802_to_901122_D=15.RData"))
 # load( file.path(path_proj, "data", "results", "SARI","SARI_090802_to_901122_D=15.RData"))
 #case_true - as.numeric(data_41002_input[,26])
 
@@ -249,7 +249,7 @@ for (i in 1:length(out_SARI$dates)) {
   num_N_hist <- ncol(out_SARI$proposed[[i]]$draws(variables = "N", format = "draws_matrix"))
   
   pred <- get_N_lastL_draws(out_SARI$baseline2[[i]]$output_files(), num_N, min(num_N, L), if_impute = T)
-  pred_hist <- get_N_lastL_draws(out_SARI$proposed[[i]]$output_files(), num_N, min(num_N, L), if_impute = T)
+  pred_hist <- get_N_lastL_draws(out_SARI$proposed[[i]]$output_files(), num_N_hist, min(num_N_hist, L), if_impute = T)
   
   y_true <- as.numeric(tail(out_SARI$case_true[[i]], min(num_N, L)))
     # crps
@@ -333,7 +333,8 @@ for (i in 1:length(out_SARI$dates)) {
 }
 
 
-final_avg <- bind_rows(final_metrics, .id = "id") %>%
+final_avg <- bind_rows(final_metrics, .id = "id") %>% 
+  filter(model != "baseline") %>% 
   group_by(model) %>%
   summarise(
     RMSE  = round(mean(RMSE,  na.rm = TRUE), 2),
@@ -344,8 +345,8 @@ final_avg <- bind_rows(final_metrics, .id = "id") %>%
     mcr95 = round(mean(mcr95, na.rm = TRUE), 2),
     mcr50 = round(mean(mcr50, na.rm = TRUE), 2),
     .groups = "drop"
-  ) %>% filter(model != "baseline")  %>%
-  select(-c("MAE", "MAPE"))
+  )    %>%   select(-c("MAE", "MAPE")) 
+
 
 print(final_avg)
 
@@ -362,7 +363,7 @@ xtable(final_metrics_out, digits = 2,
 library(writexl)
 
 # write
-write_xlsx(final_metrics_out, file.path(path_proj, "plots_to_show","SARI","final_metrics_D26.xlsx"))
+write_xlsx(final_metrics_out, file.path(path_proj, "plots_to_show","SARI","final_metrics_D15.xlsx"))
 
 ```
 
