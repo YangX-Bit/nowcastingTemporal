@@ -202,14 +202,7 @@ H_used <- 3
  )       
  E_vec <- exposure$exposure   
  
-#  all_states <- c(
-#   "RS"
-# )       
-# E_vec <- exposure$exposure[c(20)]  
-
-#all_states <- c("SP")
-#E_vec <-  exposure$exposure[24]
-
+ 
 include_GT <- T                      # if include GT
 
 delay_D <- 15
@@ -616,7 +609,7 @@ make_state_summary_from_results <- function(state_name, baseline, results_bsl, r
   })
 }
 
-states <- c("AL","BA","SP") 
+states <- c("AM","RJ","SP") 
 plot_levels <- c(0.50, 0.95)
 data_plot <- data.frame()
 for(i in states){
@@ -645,9 +638,9 @@ state_actual_range <- data_plot %>%
 
 print(state_actual_range)
 y_limits <- tibble(
-  state = c("AL","BA","SP"),
+  state = states,
   y_min = c(0, 0, 0),
-  y_max = c(1500, 40000, 300000)  
+  y_max = c(2500, 40000, 300000)  
 )
 
 
@@ -663,7 +656,7 @@ df_plot <- data_plot %>%
     model = factor(model, levels = c("Baseline","Proposed"))
   )
 
-# 定义 eval_lab（这里只用 eval_t，如果想要 "Initial/Peak..." 自己配个向量）
+
 eval_times   <- sort(unique(df_plot$eval_t))
 eval_labels  <- paste0("t = ", eval_times)
 df_plot <- df_plot %>%
@@ -671,6 +664,12 @@ df_plot <- df_plot %>%
     eval_lab = factor(paste0("t = ", eval_t),
                       levels = eval_labels)
   )
+
+```
+
+
+```{r}
+library(ggh4x)
 
 # ---- colors ----
 method_colors <- c(
@@ -680,98 +679,14 @@ method_colors <- c(
   "Reported cases" = "black"
 )
 
-application_plot <- ggplot(df_plot, aes(x = pred_weeks)) +
-  # ribbons
-  geom_ribbon(
-    aes(ymin = .data[[lcol]], ymax = .data[[ucol]],
-        fill = model,
-        group = interaction(state, model, eval_lab)),
-    alpha = 0.25, show.legend = FALSE, na.rm = TRUE
-  ) +
-  # posterior means
-  geom_line(
-    aes(y = mean, color = model,
-        group = interaction(state, model, eval_lab)),
-    linewidth = 0.4, show.legend = FALSE, na.rm = TRUE
-  ) +
-  # reported overlay 
-  geom_line(
-    aes(y = reported, color = "Reported cases",
-        group = interaction(state, model, eval_lab)),
-    linewidth = 0.4, show.legend = TRUE, na.rm = TRUE
-  ) +
-  geom_point(
-    aes(y = reported, color = "Reported cases",
-        group = interaction(state, model, eval_lab)),
-    size = 0.5, show.legend = TRUE, na.rm = TRUE
-  ) +
-  # actual overlay
-  geom_line(
-    aes(y = actual, color = "Actual cases",
-        group = interaction(state, model, eval_lab)),
-    linewidth = 0.5, linetype = 6, show.legend = TRUE, na.rm = TRUE
-  ) +
-  facet_grid(
-    rows = vars(state, model), 
-    cols = vars(eval_lab),         
-    scales = "free_y",   
-    switch = "y"
-  ) +
-  scale_color_manual(
-    values = method_colors,
-    breaks = c("Actual cases","Reported cases"),
-    name = NULL
-  ) +
-  scale_fill_manual(
-    values = method_colors[c("Baseline","Proposed")],
-    guide = "none"
-  ) +
-  labs(x = NULL, y = "Number of cases") +
-  theme_bw(base_size = 10) +
-  theme(
-    legend.position      = c(0.15, 0.995),        
-    legend.justification = c(1, 1),
-    legend.background    = element_rect(fill = scales::alpha("white", 0.75), color = NA),
-    legend.key.height    = unit(0.25, "cm"),
-    legend.key.width     = unit(0.5, "cm"),    
-    legend.text          = element_text(size = 7), 
-    strip.background     = element_blank(),
-    strip.text           = element_text(face = "bold"),
-    panel.grid.minor     = element_blank(),
-    panel.grid.major.x   = element_blank(),
-    axis.title.y         = element_text(margin = margin(r = 6)),
-    axis.text.x          = element_text(angle = 45, hjust = 1)
-  ) +
-  guides(color = guide_legend(
-    override.aes = list(
-      linetype  = c(6, 1),      
-      shape     = c(NA, 16),    
-      linewidth = c(0.5, 0.5),
-      size      = c(NA, 1)
-    )
-  ))
 
-print(application_plot)
-
-
-ggsave(filename = file.path(path_proj, "plots_to_show", "BR", "results.png"),
-       plot = sims_result_plot,
-       width = 10, height = 8, dpi = 300)
-
-```
-
-
-```{r}
-library(ggh4x)
-
-# 你自己手动设定每个州的 y 轴上下限
+# Manually setting the limit
 y_limits <- tibble::tibble(
-  state = c("AL","BA","SP"),
+  state = states,
   y_min = c(0,    0,     0),
   y_max = c(2500, 30000, 300000)
 )
 
-# 按你的 df_plot 继续画（保持原有 geoms / facet）
 p <- ggplot(df_plot, aes(x = pred_weeks)) +
   geom_ribbon(
     aes(ymin = .data[[lcol]], ymax = .data[[ucol]],
@@ -831,7 +746,7 @@ p <- ggplot(df_plot, aes(x = pred_weeks)) +
     axis.title.y         = element_text(margin = margin(r = 6))
   )
 
-# 关键：按州单独设定 y 轴 limits（不改数据）
+# diff y axis
 p <- p + ggh4x::facetted_pos_scales(
   y = list(
     state == "AL" ~ scale_y_continuous(limits = c(y_limits$y_min[y_limits$state=="AL"],
@@ -845,5 +760,8 @@ p <- p + ggh4x::facetted_pos_scales(
 
 print(p)
 
+ggsave(filename = file.path(path_proj, "plots_to_show", "BR", "results.png"),
+       plot = p,
+       width = 12, height = 8, dpi = 300)
 ```
 
