@@ -41,15 +41,15 @@ path_to_draws_BR <- file.path(file.path(dirname(dirname(path_proj)),"projects","
 ```{r, warning = F}
 brazil_ufs <- c(
   "AC", "AL", "AP", "AM",
-  "BA", "CE", "DF", "ES",
+  "BA", "CE", "DF", #"ES",
   "GO", "MA", "MT", "MS",
   "MG", "PA", "PB", "PR",
   "PE", "PI", "RJ", "RN",
   "RS", "RO", "RR", "SC",
   "SP", "SE", "TO"
 )
-# cut_off <- 62
-cut_off <- 200
+ cut_off <- 62
+#cut_off <- 200
 case_data <- list()
 case_date <- tail(readr::read_csv(file.path(path_source_denguetracker_infodengue,
                                              202519,paste0("AC","_","2025-05-11","_infodengue.csv"))),cut_off)$ew_start
@@ -87,22 +87,41 @@ ggplot(case_df, aes(x = date, y = cases, color = uf)) +
 ```
 
 ```{r}
+# define the date
+end_dates <- data.frame(
+  uf = c(
+  "AC", "AL", "AP", "AM",
+  "BA", "CE", "DF", "GO", 
+  "MA", "MT", "MS", "MG", 
+  "PA", "PB", "PR", "PE", 
+  "PI", "RJ", "RN", "RS", 
+  "RO", "RR", "SC", "SP", 
+  "SE", "TO"
+),
+date = as.Date(c("2024-07-28","2024-11-10","2024-11-10","2024-07-28",
+                 "2024-07-28","2024-07-28","2024-07-28","2024-07-28",
+                 "2024-07-28","2024-07-28","2024-07-28","2024-07-28",
+                 "2024-07-28","2024-07-28","2024-07-28","2024-09-29",
+                 "2024-07-28","2024-07-28","2024-07-28","2024-07-28",
+                 "2024-07-28","2024-11-10","2024-07-28","2024-07-28",
+                 "2024-09-29","2024-07-28"))
+)
+
 actual_cases <- ggplot(case_df, aes(x = date, y = cases)) +
   geom_line(color = "steelblue", size = 0.8) +
-  geom_vline(xintercept = as.Date("2024-07-28"), 
+  geom_vline(data = end_dates, aes(xintercept = date),
              linetype = "dashed", color = "black", size = 0.8) +
   facet_wrap(~ uf, scales = "free_y", ncol = 6) +
-  labs(title = "Dengue Case Trends per State",
-       x = "Date", y = "Number of Cases") +
+  labs(title = NULL, x = "Date", y = "Number of Cases") +
   theme_minimal(base_size = 12) +
   theme(
     strip.text = element_text(face = "bold"),
     panel.background   = element_rect(fill = "white", colour = NA),
     plot.background    = element_rect(fill = "white", colour = NA),
     panel.grid.major   = element_line(colour = "grey90"),
-    panel.grid.minor   = element_line(colour = "grey95")
+    panel.grid.minor   = element_line(colour = "grey95"),
+    axis.text.x        = element_text(angle = 45, hjust = 1)
   )
-
 
 print(actual_cases)
 ggsave(filename = file.path(path_proj, "plots_to_show", "BR", "actual_cases.png"),
@@ -732,7 +751,7 @@ p <- ggplot(df_plot, aes(x = pred_weeks)) +
   labs(x = NULL, y = "Number of cases") +
   theme_bw(base_size = 10) +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),  # x 标签 45°
+    axis.text.x = element_text(angle = 45, hjust = 1),  # x 45°
     legend.position      = c(0.15, 0.995),
     legend.justification = c(1, 1),
     legend.background    = element_rect(fill = scales::alpha("white", 0.75), color = NA),
