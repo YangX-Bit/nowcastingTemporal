@@ -554,6 +554,7 @@ path_to_save_NFRM <- file.path(path_proj, "data", "simulation","results","NFRM")
 
 
 ```{r}
+data_NFRM <- readRDS(file.path(path_to_save_NFRM, "data_NFRM.rds"))
 files_prps_NFRM <- readRDS(file.path(path_to_save_NFRM, "files_prps_NFRM.rds"))
 files_bsl_NFRM  <- readRDS(file.path(path_to_save_NFRM, "files_bsl_NFRM.rds"))
 

@@ -653,6 +653,7 @@ path_to_save_FR <- file.path(path_proj, "data", "simulation","results","FR")
 
 
 ```{r}
+data_FR <- readRDS(file.path(path_to_save_FR, "data_FR.rds"))
 files_prps_FR <- readRDS(file.path(path_to_save_FR, "files_prps_FR.rds"))
 files_bsl_FR  <- readRDS(file.path(path_to_save_FR, "files_bsl_FR.rds"))
 

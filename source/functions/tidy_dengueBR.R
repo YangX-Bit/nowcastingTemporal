@@ -159,13 +159,24 @@ get_infodengue_data <- function(
     # Fill missing values from left to right
     if (fill_missing) {
       for (r in seq_len(N)) {
-        for (c in 2:(D + 1)) {
-          if (is.na(M[r, c])) {
-            M[r, c] <- (M[r, c - 1] + M[r, c + 1])/2
+        for (c in 1:(D + 1)) {
+          if (c == 1) {
+            if (is.na(M[r, c]) && r > 1) {
+              M[r, c] <- M[r - 1, c]
+            }
+          } else {
+            if (is.na(M[r, c])) {
+              if (c < (D + 1) && !is.na(M[r, c + 1])) {
+                M[r, c] <- ceiling((M[r, c - 1] + M[r, c + 1]) / 2)
+              } else {
+                M[r, c] <- M[r, c - 1] 
+              }
+            }
           }
         }
       }
     }
+    
     
     # Set last X rows of delayX columns to NA
     if(if_last_D_cols_NA){
