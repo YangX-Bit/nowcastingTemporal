@@ -426,21 +426,6 @@ nowcasting_moving_window_with_temporal <- function(data, scoreRange, case_true =
       
       # Fit the Stan model
       if(model_name == "baseline"){
-        stan_data_trunc <- c(list(T = N_obs_local, D = D, Y = data_trunc), hypers)
-        
-        sampling_code <- function() {
-          compiled_model$sample(
-            data = stan_data_trunc,
-            iter_sampling = iter_sampling,
-            iter_warmup = iter_warmup,
-            chains = num_chains,
-            parallel_chains = num_chains,
-            refresh = refresh,
-            thin = thin,
-            output_dir = posterior_draws_path
-          )
-        }
-      }else if(model_name == "baseline2"){
         stan_data_trunc <- c(list(T = N_obs_local_recent, D = D, Y = data_trunc_recent), hypers)
         
         sampling_code <- function(){
@@ -488,3 +473,4 @@ nowcasting_moving_window_with_temporal <- function(data, scoreRange, case_true =
   }
   return(model_fits)
 }
+
