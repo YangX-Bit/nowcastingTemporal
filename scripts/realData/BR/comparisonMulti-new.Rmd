@@ -10,7 +10,6 @@ knitr::opts_chunk$set(echo = TRUE)
 library(cmdstanr)
 library(bayesplot)
 library(lubridate)
-library(SpatialEpi)
 ```
 
 ```{r}
@@ -35,8 +34,7 @@ path_source_denguetracker_GT <- file.path(path_source_denguetracker_data, "gtren
 
 path_to_draws_BR <- file.path(file.path(dirname(dirname(path_proj)),"projects","draws","BR"))
 
-
-
+set_cmdstan_path(file.path(dirname(dirname(path_proj)),"cmdstan-2.32.0"))
 ```
 
 
@@ -59,6 +57,8 @@ for (i in 1:length(brazil_ufs)) {
   case_data[[brazil_ufs[i]]] <- tail(readr::read_csv(file.path(path_source_denguetracker_infodengue,
                                              202519,paste0(brazil_ufs[i],"_","2025-05-11","_infodengue.csv"))),cut_off)$sum_of_cases  
 }
+
+
 ```
 
 ```{r}
@@ -156,6 +156,8 @@ total_cases_2024 <- case_df %>%
 
 exposure <- total_cases_2024$expected
 
+
+
 ```
 
 
@@ -244,7 +246,7 @@ H_used <- 3
    "RS", "RO", "RR", "SC",
    "SP", "SE", "TO"
  )       
- E_vec <- exposure$exposure   
+ E_vec <- exposure  
  
  
 include_GT <- T                      # if include GT
@@ -363,9 +365,9 @@ suppressMessages(
           iter_warmup         = iter_warmup,
           chains              = chain_num,
           refresh             = refresh,
-          posterior_draws_path = path_to_draws_BR
+          posterior_draws_path = file.path(file.path(dirname(dirname(path_proj)),"projects","draws","BR_indirE"))
         )
-        saveRDS(results_wGT_i, file.path(fit_dir, sprintf("%s_ARABMwGT_fit.rds", state_i)))
+        saveRDS(results_wGT_i, proposed_indir_E, file.path(fit_dir, sprintf("%s_ARABMwGT_fit.rds", state_i)))
       }
     )
   )
