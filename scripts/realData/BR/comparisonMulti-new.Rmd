@@ -9,6 +9,8 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(cmdstanr)
 library(bayesplot)
+library(lubridate)
+library(SpatialEpi)
 ```
 
 ```{r}
@@ -48,8 +50,8 @@ brazil_ufs <- c(
   "RS", "RO", "RR", "SC",
   "SP", "SE", "TO"
 )
- cut_off <- 62
-#cut_off <- 200
+# cut_off <- 62
+cut_off <- 200
 case_data <- list()
 case_date <- tail(readr::read_csv(file.path(path_source_denguetracker_infodengue,
                                              202519,paste0("AC","_","2025-05-11","_infodengue.csv"))),cut_off)$ew_start
@@ -128,11 +130,34 @@ ggsave(filename = file.path(path_proj, "plots_to_show", "BR", "actual_cases.png"
        plot = actual_cases,
        width = 10, height = 8, dpi = 300)
 
-exposure <- case_df %>% group_by(uf) %>% mutate(exposure = max(cases)/3)%>%
-  select(uf,exposure) %>% unique()
-exposure <- exposure[-8,]
+
 
 ```
+
+```{r}
+pop_br <- readxl::read_xlsx(file.path(path_proj, "PAPER", "population_br_per_states_24to25.xlsx"))
+
+total_cases_2024 <- case_df %>%
+  filter(year(date) == 2024) %>%          # filter year 2024
+  group_by(uf) %>%                        # per state
+  summarise(total_cases = sum(cases, na.rm = TRUE)) %>% 
+  ungroup() %>%
+  left_join(pop_br %>% select(abbreviation, mid2024), 
+            by = c("uf" = "abbreviation")) %>% 
+  mutate(
+    # national rate
+    national_rate = sum(total_cases) / sum(mid2024),
+    # expected per state
+    expected = mid2024 * national_rate,
+    # SIR
+    SIR = total_cases / expected
+  ) %>% # range order
+  dplyr::arrange(match(uf, brazil_ufs))
+
+exposure <- total_cases_2024$expected
+
+```
+
 
 ## the test
 ### function
