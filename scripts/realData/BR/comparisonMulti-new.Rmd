@@ -130,33 +130,45 @@ ggsave(filename = file.path(path_proj, "plots_to_show", "BR", "actual_cases.png"
        plot = actual_cases,
        width = 10, height = 8, dpi = 300)
 
-
+# exposure <- case_df %>% group_by(uf) %>% mutate(exposure = max(cases)/3)%>%
+#   select(uf,exposure) %>% unique()
+# exposure <- exposure[-8,]
 
 ```
 
 ```{r}
 pop_br <- readxl::read_xlsx(file.path(path_proj, "PAPER", "population_br_per_states_24to25.xlsx"))
 
-total_cases_2024 <- case_df %>%
-  filter(year(date) == 2024) %>%          # filter year 2024
-  group_by(uf) %>%                        # per state
-  summarise(total_cases = sum(cases, na.rm = TRUE)) %>% 
+# expected number per week per state
+expected <- case_df %>%
+  mutate(
+    start_date = as.Date("2024-03-03"),
+    end_date   = case_when(
+      uf %in% c("AL", "AP", "RR") ~ as.Date("2024-11-10"),
+      uf %in% c("PE", "SE")       ~ as.Date("2024-09-29"),
+      TRUE                        ~ as.Date("2024-07-28")
+    )
+  ) %>%
+  filter(date >= start_date & date <= end_date) 
+
+# calculate the rate 
+national_rate  <- expected %>%
+  group_by(uf) %>%
+  summarise(total_cases = sum(cases, na.rm = TRUE)) %>%
   ungroup() %>%
   left_join(pop_br %>% select(abbreviation, mid2024), 
-            by = c("uf" = "abbreviation")) %>% 
+            by = c("uf" = "abbreviation")) %>%
   mutate(
     # national rate
     national_rate = sum(total_cases) / sum(mid2024),
-    # expected per state
-    expected = mid2024 * national_rate,
-    # SIR
-    SIR = total_cases / expected
-  ) %>% # range order
-  dplyr::arrange(match(uf, brazil_ufs))
+    E = national_rate * mid2024,
+    diff = E -total_cases,
+    SIR = total_cases / E
+  )%>%
+  mutate(uf = factor(uf, levels = brazil_ufs)) %>%
+  arrange(uf)
 
-exposure <- total_cases_2024$expected
-
-
+exposure <- national_rate$E
 
 ```
 
@@ -247,6 +259,14 @@ H_used <- 3
    "SP", "SE", "TO"
  )       
  E_vec <- exposure  
+ 
+ 
+  all_states <- c(
+    "PR", "RS", 
+    "SC", "SP"
+  )       
+  E_vec <- exposure[c(15,20,23,24)]  
+ 
  
  
 include_GT <- T                      # if include GT
@@ -367,7 +387,7 @@ suppressMessages(
           refresh             = refresh,
           posterior_draws_path = file.path(file.path(dirname(dirname(path_proj)),"projects","draws","BR_indirE"))
         )
-        saveRDS(results_wGT_i, proposed_indir_E, file.path(fit_dir, sprintf("%s_ARABMwGT_fit.rds", state_i)))
+        saveRDS(results_wGT_i, file.path(fit_dir, "proposed_indir_E" ,sprintf("%s_ARABMwGT_fit.rds", state_i)))
       }
     )
   )
@@ -387,7 +407,7 @@ suppressMessages(
       cat(sprintf(">>> [MCMC %d/%d] State = %s ...\n", i, length(all_states), state_i))
       baseline_i   <- readRDS(file.path(fit_dir, sprintf("%s_baseline.rds", state_i)))
       results_i <- readRDS(file.path(fit_dir, sprintf("%s_ARABM_fit.rds", state_i)))
-      results_wGT_i <- readRDS(file.path(fit_dir, sprintf("%s_ARABMwGT_fit.rds", state_i)))
+      results_wGT_i <- readRDS(file.path(fit_dir, "proposed_indir_E" ,sprintf("%s_ARABMwGT_fit.rds", state_i)))
       
       true_data <- baseline_i %>% select(ew_start, sum_of_cases_final) %>% unique()
       
@@ -418,8 +438,8 @@ suppressMessages(
           y_true <- tail(y_true, min(num_N, L))
           
           # crps
-          tmp_crps[j] <- mean(crps_sample(y = y_true$sum_of_cases_final, dat = pred))
-          tmp_wGT_crps[j]  <- mean(crps_sample(y = y_true$sum_of_cases_final, dat = pred_wGT))
+          tmp_crps[j] <- mean(scoringRules::crps_sample(y = y_true$sum_of_cases_final, dat = pred))
+          tmp_wGT_crps[j]  <- mean(scoringRules::crps_sample(y = y_true$sum_of_cases_final, dat = pred_wGT))
           
           # 50%
           tmp_mcr50[j] <- coverage_rate_sample(y_true$sum_of_cases_final, pred, level = 0.50)
@@ -456,7 +476,7 @@ for (i in seq_along(all_states)) {
   # read data
   baseline_i   <- readRDS(file.path(fit_dir, sprintf("%s_baseline.rds", state_i)))
   results_i    <- readRDS(file.path(fit_dir, sprintf("%s_ARABM_fit.rds", state_i)))
-  results_wGT_i<- readRDS(file.path(fit_dir, sprintf("%s_ARABMwGT_fit.rds", state_i)))
+  results_wGT_i<- readRDS(file.path(fit_dir, "proposed_indir_E" ,sprintf("%s_ARABMwGT_fit.rds", state_i)))
   # results
   arabm_i     <- extract_N_summary(results_i,    num_N = 4) # 
   arabm_wGT_i <- extract_N_summary(results_wGT_i,num_N = 4, model_name = "ARABMwGT")
@@ -656,7 +676,9 @@ make_state_summary_from_results <- function(state_name, baseline, results_bsl, r
 }
 
 # states <- c("AM","RJ","SP") 
-states <- c("AM", "RJ", "SE")
+# states <- c("AM", "RJ", "SE")
+
+states <- c("AM","RJ","SE") 
 plot_levels <- c(0.50, 0.95)
 data_plot <- data.frame()
 for(i in states){
@@ -725,7 +747,7 @@ method_colors <- c(
 y_limits <- tibble::tibble(
   state = states,
   y_min = c(0,    0,     0),
-  y_max = c(2500, 35000, 1000)
+  y_max = c(2000, 30000, 1100)
 )
 
 p <- ggplot(df_plot, aes(x = pred_weeks)) +

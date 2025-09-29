@@ -111,12 +111,12 @@ model {
   }
 
   // -------------------- (2) Predictor/season/noise priors --------------------
-  beta0         ~ normal(0, 0.1);
+  beta0         ~ normal(0, 1.5);
   beta_x        ~ normal(0, 0.5);
   for (i in 1:S) beta_s[i] ~ normal(0, 0.5);
 
   sigma_w ~ lognormal(-1.5, 1);
-  rho_w   ~ lognormal(-0.3, 0.5);
+  rho_w   ~ lognormal(-0.8, 0.5);
   w[1]    ~ normal(0, sigma_w);
   for (g in 2:(H+T))
     w[g] ~ normal(rho_w * w[g-1], sigma_w);
