@@ -138,10 +138,12 @@ N_obs <- 200
 # plot(x = data_41002$date,y = data_41002$Notifications, type = "l")
 unique(SARI$regionalsaude)
 
-SARI_collapsed <- SARI %>%
+SARI_collapsed_all <- SARI %>%
   filter(regionalsaude != 0) %>%
   group_by(date, epiyear, epiweek ) %>%
-  summarise(across(-regionalsaude, ~ sum(.x, na.rm = TRUE)), .groups = "drop") %>% # combine
+  summarise(across(-regionalsaude, ~ sum(.x, na.rm = TRUE)), .groups = "drop") 
+
+SARI_collapsed <- SARI_collapsed_all %>% # combine
   select(-c("epiweek","epiyear")) %>%
   relocate(Notifications, .after = last_col())
 
@@ -198,6 +200,22 @@ weeks_per_yr <- 52
 t <- 1:(weeks_per_yr * 3)
 fourier_basis <- generate_fourier_basis(t, H_max = 10, period = weeks_per_yr)
 H_used <- 3
+
+```
+
+# Expected
+```{r}
+
+total_cases <- SARI_collapsed_all %>%
+  filter(date >= as.Date("2015-03-22") & date <= as.Date("2015-09-28")) %>%
+  select(Notifications)
+
+total_cases <- sum(total_cases$Notifications)
+
+# 144 muni in state Parana
+pop <- 8165436
+
+
 
 ```
 
