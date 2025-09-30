@@ -250,22 +250,7 @@ H_used <- 3
  )       
  E_vec <- exposure$E_it  
  
-  all_states <- c(
-"PR", "SP"
- )       
- E_vec <- exposure$E_it[c(15,24)] 
- 
- 
-# all_states <- c(
-#   "PR", "RS", 
-#   "SC", "SP"
-# )       
-# E_vec <- exposure$E_it[c(15,20,23,24)]  
- 
-   all_states <- c(
-"PR"
- )       
- E_vec <- exposure$E_it[c(15)] 
+
  
 include_GT <- T                      # if include GT
 
@@ -353,7 +338,7 @@ suppressMessages(
 ```
 
 ```{r, message=FALSE}
-set.seed(1)
+set.seed(111)
 
 suppressMessages(
   suppressWarnings(
