@@ -137,7 +137,7 @@ ggsave(filename = file.path(path_proj, "plots_to_show", "BR", "actual_cases.png"
 ```
 
 ```{r}
-pop_br <- readxl::read_xlsx(file.path(path_proj, "PAPER", "population_br_per_states_24to25.xlsx"))
+pop_br <- readxl::read_xlsx(file.path(path_proj, "PAPER", "population_br_per_states_24to25.xlsx"))[-c(1,2,10,20,25,29),]
 
 # expected number per week per state
 expected <- case_df %>%
@@ -150,25 +150,15 @@ expected <- case_df %>%
     )
   ) %>%
   filter(date >= start_date & date <= end_date) 
-
-# calculate the rate 
-national_rate  <- expected %>%
+# combine
+expected_within <- expected %>%
   group_by(uf) %>%
-  summarise(total_cases = sum(cases, na.rm = TRUE)) %>%
-  ungroup() %>%
-  left_join(pop_br %>% select(abbreviation, mid2024), 
-            by = c("uf" = "abbreviation")) %>%
-  mutate(
-    # national rate
-    national_rate = sum(total_cases) / sum(mid2024),
-    E = national_rate * mid2024,
-    diff = E -total_cases,
-    SIR = total_cases / E
-  )%>%
-  mutate(uf = factor(uf, levels = brazil_ufs)) %>%
-  arrange(uf)
+  mutate(E_it = mean(cases, na.rm = TRUE),   # Expected is the average here, since pop keeps the same
+         SIR_it = cases / E_it) %>%
+  ungroup()
 
-exposure <- national_rate$E
+exposure <- expected_within %>% select(uf, E_it) %>% unique()
+
 
 ```
 
@@ -258,16 +248,24 @@ H_used <- 3
    "RS", "RO", "RR", "SC",
    "SP", "SE", "TO"
  )       
- E_vec <- exposure  
- 
+ E_vec <- exposure$E_it  
  
   all_states <- c(
-    "PR", "RS", 
-    "SC", "SP"
-  )       
-  E_vec <- exposure[c(15,20,23,24)]  
+"PR", "SP"
+ )       
+ E_vec <- exposure$E_it[c(15,24)] 
  
  
+# all_states <- c(
+#   "PR", "RS", 
+#   "SC", "SP"
+# )       
+# E_vec <- exposure$E_it[c(15,20,23,24)]  
+ 
+   all_states <- c(
+"PR"
+ )       
+ E_vec <- exposure$E_it[c(15)] 
  
 include_GT <- T                      # if include GT
 
@@ -355,7 +353,7 @@ suppressMessages(
 ```
 
 ```{r, message=FALSE}
-set.seed(seed)
+set.seed(1)
 
 suppressMessages(
   suppressWarnings(
